@@ -45,7 +45,7 @@ export function loadSecret(name: string): string | null {
     return v;
   } catch (e) {
     log.error(`decrypt failed for "${name}"`, e);
-    throw new Error('decrypt_failed');
+    throw new Error('decrypt_failed', { cause: e });
   }
 }
 
