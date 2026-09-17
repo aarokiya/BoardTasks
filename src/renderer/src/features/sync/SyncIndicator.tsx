@@ -88,7 +88,10 @@ export function SyncIndicator(): ReactElement {
       return { state: 'rate_limited', word: `Retrying in ${formatCountdown(remainingMs)}`, icon: <IconClock size={13} />, tone: 'warn' };
     }
     if (status === 'error') return { state: 'error', word: 'Sync error', icon: <IconAlert size={13} />, tone: 'danger' };
-    if (status === 'paused') return { state: 'paused', word: 'Paused', icon: <IconPause size={13} />, tone: 'neutral' };
+    if (status === 'paused') {
+      const word = auth?.state === 'signed_in' ? 'Sync paused' : 'Not connected';
+      return { state: 'paused', word, icon: <IconPause size={13} />, tone: 'neutral' };
+    }
     if (status === 'syncing' && showSpinner) {
       return { state: 'syncing', word: 'Syncing…', icon: <Spinner size={13} />, tone: 'neutral' };
     }

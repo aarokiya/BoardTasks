@@ -75,25 +75,41 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
 export const MAX_ATTEMPTS = 5;
 /** Retry-After is clamped: Google occasionally suggests absurd waits. */
 export const MAX_RETRY_AFTER_MS = 300_000;
+/**
+ * A daily quota does not clear in five minutes. Google resets it at midnight
+ * Pacific and does not say when in the response, so an hour is the floor we
+ * wait before asking again.
+ */
+export const DAILY_RETRY_AFTER_MS = 3_600_000;
+/**
+ * The longest delay the wrapper will absorb itself.
+ *
+ * Anything longer belongs to the outbox and to the user interface, not to a
+ * sleeping promise: a `sleep(60_000)` inside the request holds the whole sync
+ * cycle open, so the status pill says "Syncing…" for a minute and the
+ * countdown the user needs is never computed. Throw instead, and let the
+ * engine park the cycle and show the wait.
+ */
+export const MAX_INLINE_RETRY_MS = 2_000;
 
 /**
  * Retry-After comes in two spellings — delta-seconds ("120") and an HTTP-date
  * ("Wed, 21 Oct 2026 07:28:00 GMT"). Handling only the first is the classic
  * bug: the HTTP-date form parses as NaN and the client hammers the server.
  */
-export function parseRetryAfter(value: string | null | undefined, nowMs: number): number | null {
+export function parseRetryAfter(value: string | null | undefined, nowMs: number, maxMs = MAX_RETRY_AFTER_MS): number | null {
   if (value === null || value === undefined) return null;
   const s = value.trim();
   if (s === '') return null;
-  if (/^\d+$/.test(s)) return clampRetry(Number(s) * 1000);
+  if (/^\d+$/.test(s)) return clampRetry(Number(s) * 1000, maxMs);
   const t = Date.parse(s);
   if (Number.isNaN(t)) return null;
-  return clampRetry(t - nowMs);
+  return clampRetry(t - nowMs, maxMs);
 }
 
-function clampRetry(ms: number): number {
+function clampRetry(ms: number, maxMs = MAX_RETRY_AFTER_MS): number {
   if (!Number.isFinite(ms)) return 0;
-  return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, Math.round(ms)));
+  return Math.min(maxMs, Math.max(0, Math.round(ms)));
 }
 
 function buildUrl(baseUrl: string, path: string, query: Record<string, QueryValue> | undefined): string {
@@ -167,8 +183,9 @@ export function createHttpClient(opts: HttpClientOptions): HttpClient {
     if (status === 403) {
       const { kind, reason } = classifyForbidden(body);
       if (kind === 'rate' || kind === 'daily') {
-        const retryAfter = parseRetryAfter(res.headers.get('retry-after'), clock.now());
-        throw new RateLimitError(retryAfter ?? (kind === 'daily' ? MAX_RETRY_AFTER_MS : 30_000), kind === 'daily', reason, 403, body);
+        const cap = kind === 'daily' ? DAILY_RETRY_AFTER_MS : MAX_RETRY_AFTER_MS;
+        const retryAfter = parseRetryAfter(res.headers.get('retry-after'), clock.now(), cap);
+        throw new RateLimitError(retryAfter ?? (kind === 'daily' ? DAILY_RETRY_AFTER_MS : 30_000), kind === 'daily', reason, 403, body);
       }
       throw new AuthError('insufficient_scope', body?.message ?? 'Google refused the request (insufficient permissions).');
     }
@@ -234,6 +251,14 @@ export function createHttpClient(opts: HttpClientOptions): HttpClient {
           const retryable = isRetryable(e);
           if (!spec.idempotent || !retryable || attempts >= maxAttempts) throw e;
           const wait = e instanceof RateLimitError ? e.retryAfterMs : nextDelay(attempts, random);
+          // Absorb only a blink. A longer wait is the caller's business: the
+          // engine can then show 'rate_limited' with a countdown and re-arm
+          // the cycle for exactly that moment, instead of the UI sitting on
+          // "Syncing…" while this promise sleeps.
+          if (wait > MAX_INLINE_RETRY_MS) {
+            logger.debug(`${spec.label ?? spec.path} needs ${wait}ms; handing the wait to the caller`);
+            throw e;
+          }
           logger.debug(`${spec.label ?? spec.path} attempt ${attempts} failed (${describe(e)}); retrying in ${wait}ms`);
           await sleep(wait);
         }

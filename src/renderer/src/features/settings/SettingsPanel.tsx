@@ -4,6 +4,7 @@ import { TIME_RE } from '@shared/date/civil';
 import { formatAgo } from '@shared/date/format';
 import { call } from '../../lib/ipc';
 import { useStore } from '../../store/store';
+import { selectLists } from '../../store/selectors/views';
 import { Button } from '../../components/Button';
 import { Checkbox } from '../../components/Checkbox';
 import { Dialog } from '../../components/Dialog';
@@ -51,6 +52,49 @@ const INTERVAL_OPTIONS = [
   { value: '900', label: '15 min' },
 ] as const;
 
+
+/** Electron accelerator: at least one modifier plus one key, e.g. Control+Shift+Space. */
+const ACCELERATOR_RE =
+  /^((CommandOrControl|CmdOrCtrl|Command|Cmd|Control|Ctrl|Alt|Option|Shift|Super|Meta)\+)+(Space|Tab|Enter|Return|Escape|Esc|Up|Down|Left|Right|Home|End|PageUp|PageDown|Backspace|Delete|Insert|F([1-9]|1[0-9]|2[0-4])|[A-Za-z0-9]|[`~!@#$%^&*()\-_=+[\]{};:'",.<>/?\\|])$/;
+
+function ShortcutRow({ value, onSave }: { value: string; onSave: (v: string) => void }): ReactElement {
+  const [draft, setDraft] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+  // Re-derive the draft when the saved value changes (e.g. another window saved it).
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) {
+    setSeen(value);
+    setDraft(value);
+  }
+  const commit = (): void => {
+    const v = draft.trim();
+    if (v === value) return;
+    if (!ACCELERATOR_RE.test(v)) {
+      setError('Use at least one modifier and a key, like Control+Shift+Space.');
+      return;
+    }
+    setError(null);
+    onSave(v);
+  };
+  return (
+    <Row
+      title="Quick Add shortcut"
+      hint="Works from any app. If another app already owns the combination, BoardTasks tells you and the old shortcut stays."
+      control={
+        <Input
+          aria-label="Quick Add shortcut"
+          mono
+          value={draft}
+          error={error}
+          onChange={(e) => { setDraft(e.currentTarget.value); if (error) setError(null); }}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
+        />
+      }
+    />
+  );
+}
+
 function Row({ title, hint, control, stack }: { title: string; hint?: string; control: ReactNode; stack?: boolean }): ReactElement {
   return (
     <div className={cx(s.row, stack && s.rowStack)}>
@@ -73,6 +117,7 @@ export function SettingsPanel(): ReactElement {
   const toast = useStore((st) => st.toast);
 
   const [section, setSection] = useState<SectionId>('general');
+  const lists = useStore(selectLists);
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [wipeLocalData, setWipeLocalData] = useState(false);
@@ -188,7 +233,7 @@ export function SettingsPanel(): ReactElement {
               />
               <Row
                 title="Translucent sidebar"
-                hint="Off by default: a vibrant surface is an unstable background for text contrast. Forced off when the system reduces transparency."
+                hint="Off by default: a vibrant surface is an unstable background for text contrast. Forced off when the system reduces transparency. Takes effect the next time BoardTasks starts."
                 control={<Switch label="Translucent sidebar" checked={settings.translucentSidebar} onChange={(v) => save({ translucentSidebar: v })} />}
               />
               <Row title="Date order" control={
@@ -226,6 +271,7 @@ export function SettingsPanel(): ReactElement {
                   />
                 }
               />
+              <ShortcutRow value={settings.quickAddShortcut} onSave={(quickAddShortcut) => save({ quickAddShortcut })} />
             </div>
           </>
         );
@@ -323,6 +369,23 @@ export function SettingsPanel(): ReactElement {
                     options={INTERVAL_OPTIONS}
                     onChange={(v) => save({ syncIntervalSec: Number(v) })}
                   />
+                }
+              />
+              <Row
+                title="Default list"
+                hint="Where Quick Add puts a task when you don't name a list."
+                control={
+                  <select
+                    className={s.select}
+                    aria-label="Default list"
+                    value={settings.defaultListId ?? ''}
+                    onChange={(e) => save({ defaultListId: e.currentTarget.value || null })}
+                  >
+                    {lists.length === 0 ? <option value="">No lists yet</option> : null}
+                    {lists.map((l) => (
+                      <option key={l.id} value={l.id}>{l.title}</option>
+                    ))}
+                  </select>
                 }
               />
               <Row title="Last synced" control={<span className={s.accountMeta}>{formatAgo(sync?.lastSyncSucceededAt ?? null)}</span>} />

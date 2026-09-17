@@ -1,6 +1,6 @@
 import type { Task } from '@shared/models';
 import type { SmartViewId, ViewId } from '@shared/constants';
-import { addDays, type CivilDate } from '@shared/date/civil';
+import { addDays, civilFromInstant, type CivilDate } from '@shared/date/civil';
 import { formatUpcomingGroup } from '@shared/date/format';
 import type { GithubFilter, State } from '../store';
 
@@ -164,8 +164,14 @@ export const selectRows = memo(
       }
       case 'completed': {
         const sorted = [...tops].sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
-        const today = sorted.filter((t) => (t.completedAt ?? '').slice(0, 10) === s.today);
-        const rest = sorted.filter((t) => !today.includes(t));
+        // `completedAt` is a UTC instant; slicing its first ten characters would
+        // compare a UTC calendar day against the user's local one and file
+        // anything completed after 16:00 in Los Angeles under "Earlier".
+        const today: Task[] = [];
+        const rest: Task[] = [];
+        for (const t of sorted) {
+          (t.completedAt !== null && civilFromInstant(t.completedAt) === s.today ? today : rest).push(t);
+        }
         group('today', 'Today', today, () => 0);
         group('earlier', 'Earlier', rest, () => 0);
         break;

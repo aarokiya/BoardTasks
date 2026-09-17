@@ -20,9 +20,9 @@ import type { Clock, Random } from './clock';
 import { isoAt } from './clock';
 import { parseBase } from './merge';
 import type { NetworkMonitor } from './network-monitor';
-import { runPull, type PullDeps } from './pull';
+import { runPrePull, runPull, type PullDeps } from './pull';
 import { runPush, type PushDeps } from './push';
-import { createScheduler, type Scheduler, type SchedulerIntervals, type SyncTrigger } from './scheduler';
+import { createScheduler, type CycleOutcome, type Scheduler, type SchedulerIntervals, type SyncTrigger } from './scheduler';
 
 /**
  * Ties the pieces together: scheduler → (push, then pull) → state + events.
@@ -55,6 +55,8 @@ export interface SyncEngine {
   onState(cb: (s: SyncState) => void): () => void;
   localEdit(): void;
   setFocused(focused: boolean): void;
+  /** Apply a new poll cadence (the sync-interval setting). */
+  setIntervals(next: Partial<SchedulerIntervals>): void;
   retryOutbox(id: string): void;
   retryAllOutbox(): void;
   discardOutbox(id: string): void;
@@ -161,7 +163,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     });
   }
 
-  async function runCycle(opts: { full: boolean; trigger: SyncTrigger }): Promise<void> {
+  async function runCycle(opts: { full: boolean; trigger: SyncTrigger }): Promise<CycleOutcome> {
     running = true;
     state = { ...state, lastSyncStartedAt: clock.nowIso() };
     publish();
@@ -176,13 +178,40 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     const conflicts = new Set<string>();
     const listsTouched = new Set<string>();
     const deletedLists = new Set<string>();
+    let retryAt: number | null = null;
 
     try {
-      const push = await runPush(pushDeps);
+      // Conflict detection has to run BEFORE the push. The push's pre-check
+      // compares the row's `updated_at` with the entry's `base_updated_at`, and
+      // both were written by the same pull — so an edit another device made
+      // since then is invisible to it and the push silently overwrites it.
+      // The merge is per-field and dirty-aware, so this can only raise a
+      // conflict, never lose a local edit.
+      const pre = await runPrePull(pullDeps, now);
+      for (const id of pre.changes.touched) touched.add(id);
+      for (const id of pre.changes.conflicts) conflicts.add(id);
+      for (const id of pre.changes.deleted) {
+        deletedTasks.add(id);
+        touched.delete(id);
+      }
+
+      const push = await runPush({ ...pushDeps, unverifiedLists: pre.unverified });
+      retryAt = push.retryAt;
       for (const id of push.changes.touched) touched.add(id);
       for (const id of push.listsTouched) listsTouched.add(id);
-      if (push.retryAfterMs !== null) rateLimitedUntil = clock.now() + push.retryAfterMs;
       if (push.authError !== null) throw push.authError;
+
+      if (push.retryAfterMs !== null) {
+        // Throttling is account-wide, so pulling now would only collect more
+        // 429s. Park the whole cycle: the status becomes 'rate_limited' with a
+        // countdown and the scheduler re-arms for exactly that moment.
+        rateLimitedUntil = clock.now() + push.retryAfterMs;
+        lastErrorMessage = push.dailyLimit
+          ? "Google's daily quota for this project is used up. Sync resumes when the quota resets."
+          : null;
+        logger.warn(`rate limited for ${Math.round(push.retryAfterMs / 1000)}s; skipping the pull this cycle`);
+        return { retryAt };
+      }
 
       const pull = await runPull(pullDeps, now, { full: opts.full, coldStart: opts.trigger === 'startup' });
       for (const id of pull.changes.touched) touched.add(id);
@@ -221,6 +250,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       if (touched.size > 0 || deletedTasks.size > 0) syncHooks.onTasksChanged();
       publish();
     }
+    return { retryAt };
   }
 
   const scheduler: Scheduler = createScheduler({
@@ -232,6 +262,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     isOnBattery: deps.isOnBattery ?? (() => false),
     isFocused: deps.isFocused ?? (() => true),
     intervals: deps.intervals,
+    nextPollFloorMs: () => (rateLimitedUntil === null ? 0 : Math.max(0, rateLimitedUntil - clock.now())),
   });
 
   return {
@@ -288,6 +319,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
 
     localEdit: () => scheduler.localEdit(),
     setFocused: (f) => scheduler.setFocused(f),
+    setIntervals: (next) => scheduler.setIntervals(next),
 
     retryOutbox(id) {
       const row = getOutboxRow(id);

@@ -2,7 +2,7 @@ import { app, BrowserWindow, nativeTheme, net } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createLogger, initLogger } from './logger';
-import { githubBaseUrl, isDev, isE2E, userDataOverride } from './env';
+import { githubBaseUrl, isDev, isE2E, skipOnboarding, userDataOverride } from './env';
 import { openDatabase, closeDatabase } from './db/connection';
 import { getSettings, onSettingsChanged, setSettings } from './db/repositories/settings';
 import { installProtocolHandlers } from './security/protocols';
@@ -30,10 +30,15 @@ export interface AppContext {
  * window is shown, so the user sees a dialog instead of a blank screen.
  */
 export function bootstrap(): AppContext {
+  // The override is applied in index.ts, before the single-instance lock is
+  // requested; re-applying it here is a no-op that keeps bootstrap() usable on
+  // its own (tests, future entry points).
   if (userDataOverride) app.setPath('userData', userDataOverride);
   const userData = app.getPath('userData');
   mkdirSync(userData, { recursive: true });
-  initLogger(join(userData, 'logs'), isDev ? 'debug' : 'info');
+  // E2E gets debug too: the reminder scheduler's re-arm is only observable in
+  // the log, and tests/e2e/06-features.spec.ts asserts on it.
+  initLogger(join(userData, 'logs'), isDev || isE2E ? 'debug' : 'info');
   const log = createLogger('boot');
   log.info(`BoardTasks ${__APP_VERSION__} electron=${process.versions.electron} packaged=${app.isPackaged} e2e=${isE2E}`);
 
@@ -44,7 +49,7 @@ export function bootstrap(): AppContext {
   })();
 
   // E2E seam: skip the onboarding wizard on a fresh profile.
-  if (isE2E && process.env['BT_SKIP_ONBOARDING'] === '1' && !getSettings().onboardingComplete) {
+  if (isE2E && skipOnboarding && !getSettings().onboardingComplete) {
     setSettings({ onboardingComplete: true });
   }
   // Test drivers expect "close the window" to mean quit; close-to-tray would leave the process alive.

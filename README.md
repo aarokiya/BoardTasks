@@ -43,8 +43,20 @@ npm run test:unit      # fast pure tests (dates, parser, sync engine…)
 npm run test:dom       # React component tests (jsdom + Testing Library)
 npm run build          # production bundles into out/
 npm run test:e2e       # Playwright drives the built app against a fake Google server
+npm run package:dir    # unpacked .app into dist/ (what the packaged E2E test launches)
 npm run package        # unsigned, ad-hoc-signed .dmg + .zip into dist/
 ```
+
+`tests/e2e/06-features.spec.ts` is the completeness suite — one test per promised feature, scored in
+[`docs/feature-matrix.md`](docs/feature-matrix.md). `tests/e2e/07-packaged.spec.ts` launches the
+*packaged* bundle and is opt-in:
+
+```bash
+npm run test:e2e:packaged
+```
+
+What no test can reach — real OAuth, notification banners, the menu bar, VoiceOver, Gatekeeper on
+another Mac — is a checklist in [`docs/manual-qa.md`](docs/manual-qa.md).
 
 Two pinned versions are load-bearing and must not be bumped casually: `vite` stays on 7.x (electron-vite 5 peers on it) and `typescript` on 5.x (typescript-eslint 8 peers on `<6.1`). The rest is annotated in `package.json`.
 
@@ -60,6 +72,8 @@ tests/          unit (vitest, node), dom (vitest, jsdom), e2e (Playwright + fake
 
 ### Security model
 
+Full write-up with the threat model and the rules for future changes: [`docs/security.md`](docs/security.md).
+
 - `contextIsolation`, `sandbox`, no `nodeIntegration`; the renderer is served from a custom `app://` scheme with a strict CSP (`connect-src 'self'` — the UI literally cannot reach the network; all HTTP happens in main).
 - Every IPC payload is validated with zod in main; the sender's origin and frame are checked.
 - OAuth uses Authorization Code + PKCE with a loopback redirect on `127.0.0.1` and a random port.
@@ -68,9 +82,30 @@ tests/          unit (vitest, node), dom (vitest, jsdom), e2e (Playwright + fake
 
 ### Sync model
 
-The local database is the source of truth for the UI. Every edit writes the row and an outbox entry in one transaction; the outbox is drained in order with backoff and jitter, and blocked entries (a child whose parent isn't on the server yet) wait without burning retries. Pulls use `updatedMin` with a safety skew and a watermark taken from the *server's* `updated` timestamps, plus periodic full reconciles. Conflicts are merged per field (your in-progress edit wins; the server wins for fields you haven't touched; both-changed is surfaced for you to resolve). Nothing is ever silently dropped: a change that can't be pushed after repeated failures parks in "Unsynced changes" with Retry / Discard.
+The local database is the source of truth for the UI. Every edit writes the row and an outbox entry in one transaction; the outbox is drained in order with backoff and jitter, and blocked entries (a child whose parent isn't on the server yet) wait without burning retries. Pulls use `updatedMin` with a safety skew and a watermark taken from the *server's* `updated` timestamps, plus periodic full reconciles. Conflicts are merged per field: your in-progress edit wins, and the server wins for fields you haven't touched. Nothing is ever silently dropped on the *push* side: a change that can't be pushed after repeated failures parks in "Unsynced changes" with Retry / Discard.
 
 Google Tasks has no push API and no time-of-day on due dates, so sync is polled (60 s when focused, less often in the background) and reminder times are stored locally on this Mac.
+
+## Known gaps
+
+Verified against the built app; the full audit, with file/line and a suggested fix for each, is in
+[`docs/feature-matrix.md`](docs/feature-matrix.md).
+
+- **A task edited in two places at once resolves last-write-wins.** The conflict UI exists and the
+  three-way merge exists, but pushes carry no `If-Match`, so the server never reports a collision
+  and your local edit overwrites the other device's. Same root cause makes a
+  remote-delete-plus-local-edit drop the local edit.
+- **Settings ▸ Sync ▸ Sync interval has no effect.** Polling is fixed at 60 s focused / 5 min
+  background / 15 min on battery.
+- **A Google rate limit reads as "Syncing…"** for as long as the retry-after lasts, with no
+  countdown. Nothing is lost; it just looks stuck.
+- **Being offline also reads as "Syncing…"**, and after a longer outage the queued changes take a
+  full backoff cycle (about a minute) to flush rather than going out the moment you reconnect.
+  Again, nothing is lost.
+- **View ▸ Show / Hide Completed never shows a checkmark** — the command toggles a per-list
+  preference, which is not the setting the menu reads.
+- **The Quick Add global shortcut can't be changed from the UI** (it is `⌃⇧Space`), and
+  translucent sidebar needs a restart to take effect natively.
 
 ## Keyboard
 

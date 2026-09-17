@@ -30,6 +30,7 @@
     "test:dom": "vitest run --project dom",
     "test:cov": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:packaged": "npm run package:dir && BT_PACKAGED=1 playwright test tests/e2e/07-packaged.spec.ts",
     "build": "electron-vite build",
     "package:dir": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --mac --arm64",
     "package": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",

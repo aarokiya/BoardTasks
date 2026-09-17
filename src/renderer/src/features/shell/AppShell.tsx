@@ -136,6 +136,8 @@ export function AppShell(): ReactElement {
         ) : null}
 
         {inspectorOpen && layout.detail === 'sheet' ? (
+          <>
+            <div className={s.detailScrim} onClick={() => setUi({ inspectorOpen: false })} aria-hidden="true" />
           <aside
             className={cx(s.pane, s.detailSheet)}
             style={{ width: layout.detailMaxWidth ?? DETAIL_MIN }}
@@ -147,6 +149,7 @@ export function AppShell(): ReactElement {
             </div>
             {detailNode}
           </aside>
+          </>
         ) : null}
 
         {inspectorOpen && layout.detail === 'fullscreen' ? (

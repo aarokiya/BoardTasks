@@ -1,11 +1,16 @@
 import type { IpcMainInvokeEvent } from 'electron';
-import { APP_ORIGIN, DEV_SERVER_ORIGIN, originOf } from '@shared/constants';
+import { isInternalUrl } from '../security/harden';
 
-const ALLOWED = new Set([APP_ORIGIN, DEV_SERVER_ORIGIN]);
-
-/** Never trust the renderer, including its identity: top frame only, known origin only. */
+/**
+ * Never trust the renderer, including its identity: top frame only, known
+ * origin only.
+ *
+ * `URL.origin` is the string 'null' for non-special schemes such as app://,
+ * so the origin is computed by hand (`originOf`). The allowed set is
+ * `internalOrigins()`, which drops the Vite dev origin in a packaged build.
+ */
 export function isTrustedSender(ev: IpcMainInvokeEvent): boolean {
   const frame = ev.senderFrame;
   if (!frame || frame.parent !== null) return false;
-  return ALLOWED.has(originOf(frame.url));
+  return isInternalUrl(frame.url);
 }

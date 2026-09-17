@@ -100,7 +100,7 @@
 
 .ghostRow {
   display: flex; align-items: center; height: var(--bt-row-h, var(--bt-row-h-default));
-  padding: 0 var(--bt-space-4) 0 calc(var(--bt-space-3) + 28px);
+  padding: 0 var(--bt-space-4) 0 calc(var(--bt-space-7) + 28px);
   font-size: var(--bt-text-13); color: var(--bt-text-quaternary);
   text-decoration: line-through; white-space: nowrap; overflow: hidden;
 }

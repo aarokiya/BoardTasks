@@ -11,6 +11,10 @@
   font-weight: var(--bt-weight-medium); overflow-wrap: anywhere;
 }
 .error { font-size: var(--bt-text-12); color: var(--bt-danger); overflow-wrap: anywhere; }
+.detail {
+  font-size: var(--bt-text-11); line-height: var(--bt-lh-11);
+  color: var(--bt-text-quaternary); overflow-wrap: anywhere;
+}
 .metaRow { display: flex; align-items: center; gap: var(--bt-space-4); flex-wrap: wrap; }
 .meta { font-size: var(--bt-text-12); color: var(--bt-text-tertiary); font-variant-numeric: tabular-nums; }
 .actions { display: flex; align-items: flex-start; gap: var(--bt-space-3); }

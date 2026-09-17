@@ -34,13 +34,18 @@ export interface DatePickerBodyProps {
   onDone: () => void;
   /** Focus the grid on mount. */
   autoFocus?: boolean;
+  /**
+   * Show the local reminder-time field. Off where a separate time control
+   * already exists (quick add has its own time chip).
+   */
+  showTime?: boolean;
 }
 
 /**
  * Month grid + quick chips + local-only reminder time. Mounted fresh every
  * time the surface around it opens, so it never carries stale state.
  */
-export function DatePickerBody({ due, dueTime, today, onChange, onDone, autoFocus = true }: DatePickerBodyProps): ReactElement {
+export function DatePickerBody({ due, dueTime, today, onChange, onDone, autoFocus = true, showTime = true }: DatePickerBodyProps): ReactElement {
   const [cursor, setCursor] = useState<CivilDate>(due ?? today);
   const [focused, setFocused] = useState<CivilDate>(due ?? today);
   const [timeText, setTimeText] = useState<string>(dueTime ?? '');
@@ -118,11 +123,19 @@ export function DatePickerBody({ due, dueTime, today, onChange, onDone, autoFocu
   const timeTrimmed = timeText.trim();
   const timeInvalid = timeTrimmed !== '' && !TIME_RE.test(timeTrimmed);
 
-  const quick: Array<{ id: string; label: string; date: CivilDate | null }> = [
-    { id: 'today', label: 'Today', date: today },
-    { id: 'tomorrow', label: 'Tomorrow', date: addDays(today, 1) },
-    { id: 'nextweek', label: 'Next week', date: addDays(today, 7) },
-    { id: 'clear', label: 'Clear', date: null },
+  // The hint is the date, not a restatement of the label: "Today · Today"
+  // and "Tomorrow · Tomorrow" are noise, so they are dropped.
+  const chip = (id: string, label: string, date: CivilDate | null): { id: string; label: string; date: CivilDate | null; hint: string | null } => {
+    if (date === null) return { id, label, date, hint: null };
+    const relative = formatRelative(date, today);
+    return { id, label, date, hint: relative.toLowerCase() === label.toLowerCase() ? null : relative };
+  };
+
+  const quick = [
+    chip('today', 'Today', today),
+    chip('tomorrow', 'Tomorrow', addDays(today, 1)),
+    chip('nextweek', 'Next week', addDays(today, 7)),
+    chip('clear', 'Clear', null),
   ];
 
   return (
@@ -143,8 +156,8 @@ export function DatePickerBody({ due, dueTime, today, onChange, onDone, autoFocu
               onDone();
             }}
           >
-            <span>{q.label}</span>
-            {q.date ? <span className={s.chipHint}>{formatRelative(q.date, today)}</span> : null}
+            <span className={s.chipLabel}>{q.label}</span>
+            {q.hint ? <span className={s.chipHint}>{q.hint}</span> : null}
           </button>
         ))}
       </div>
@@ -177,6 +190,7 @@ export function DatePickerBody({ due, dueTime, today, onChange, onDone, autoFocu
               aria-current={isToday ? 'date' : undefined}
               aria-label={`${WEEKDAY_NAMES[weekday(d)] ?? ''}, ${MONTHS[p.month - 1] ?? ''} ${p.day}, ${p.year}`}
               tabIndex={d === focused ? 0 : -1}
+              data-bt-autofocus={d === focused ? '' : undefined}
               className={cx(s.day, outside && s.dayOutside, isToday && !selected && s.dayToday, selected && s.daySelected)}
               onClick={() => pick(d, false)}
               onFocus={() => setFocused(d)}
@@ -187,6 +201,8 @@ export function DatePickerBody({ due, dueTime, today, onChange, onDone, autoFocu
         })}
       </div>
 
+      {showTime ? (
+        <>
       <div className={s.divider} />
 
       <div className={s.timeRow}>
@@ -218,6 +234,8 @@ export function DatePickerBody({ due, dueTime, today, onChange, onDone, autoFocu
       ) : (
         <div className={s.hint}>Reminder time is stored on this Mac only — Google Tasks has no time-of-day.</div>
       )}
+        </>
+      ) : null}
     </div>
   );
 }

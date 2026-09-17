@@ -37,10 +37,28 @@ export function nextDelay(attempts: number, random: Random): number {
  */
 export type Disposition = 'transient' | 'rate_limited' | 'permanent' | 'conflict' | 'auth' | 'blocked';
 
+/**
+ * The machine code stored on an outbox row and handed to the renderer.
+ *
+ * Closed set on purpose: the "Changes that didn't sync" sheet maps these to
+ * human sentences, so an ad-hoc code like `http_400` reaches the user as a raw
+ * string. Anything Google can do has to land on one of these.
+ */
+export type OutboxErrorCode =
+  | 'VALIDATION'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'RATE_LIMITED'
+  | 'NETWORK'
+  | 'DEPENDENCY_FAILED'
+  | 'CONFLICT'
+  | 'AUTH'
+  | 'INTERNAL';
+
 export interface Classification {
   disposition: Disposition;
   /** Machine code stored on the outbox row. */
-  code: string;
+  code: OutboxErrorCode;
   /** Human-readable, shown in the "Changes that didn't sync" sheet. */
   message: string;
   /** Present for rate_limited; the exact wait the server asked for. */
@@ -51,12 +69,15 @@ export interface Classification {
 
 export function classifyError(e: unknown): Classification {
   if (e instanceof AuthError) {
-    return { disposition: 'auth', code: `auth_${e.reason}`, message: authMessage(e.reason), retryAfterMs: null, daily: false };
+    // A real 403 arrives as an AuthError too, but "you cannot edit tasks" is a
+    // permission problem, not a dead sign-in; the sheet says different things.
+    const code: OutboxErrorCode = e.reason === 'insufficient_scope' ? 'FORBIDDEN' : 'AUTH';
+    return { disposition: 'auth', code, message: authMessage(e.reason), retryAfterMs: null, daily: false };
   }
   if (e instanceof RateLimitError) {
     return {
       disposition: 'rate_limited',
-      code: e.daily ? 'daily_limit' : 'rate_limited',
+      code: 'RATE_LIMITED',
       message: e.daily
         ? "Google's daily quota for this project is used up. Sync resumes when the quota resets."
         : 'Google is rate-limiting this account. Retrying shortly.',
@@ -65,12 +86,12 @@ export function classifyError(e: unknown): Classification {
     };
   }
   if (e instanceof ConflictError) {
-    return { disposition: 'conflict', code: 'conflict', message: 'This item changed on Google while we were sending it.', retryAfterMs: null, daily: false };
+    return { disposition: 'conflict', code: 'CONFLICT', message: 'This item changed on Google while we were sending it.', retryAfterMs: null, daily: false };
   }
   if (e instanceof NetworkError) {
     return {
       disposition: 'transient',
-      code: e.timedOut ? 'timeout' : 'network',
+      code: 'NETWORK',
       message: e.timedOut ? 'The request to Google timed out.' : "Couldn't reach Google.",
       retryAfterMs: null,
       daily: false,
@@ -79,13 +100,31 @@ export function classifyError(e: unknown): Classification {
   if (e instanceof ApiError) {
     return {
       disposition: e.retryable ? 'transient' : 'permanent',
-      code: `http_${e.status}`,
+      code: httpCode(e.status),
       message: apiMessage(e),
       retryAfterMs: null,
       daily: false,
     };
   }
-  return { disposition: 'transient', code: 'unknown', message: messageOf(e), retryAfterMs: null, daily: false };
+  return { disposition: 'transient', code: 'INTERNAL', message: messageOf(e), retryAfterMs: null, daily: false };
+}
+
+function httpCode(status: number): OutboxErrorCode {
+  switch (status) {
+    case 400:
+      return 'VALIDATION';
+    case 403:
+      return 'FORBIDDEN';
+    case 404:
+      return 'NOT_FOUND';
+    case 409:
+    case 412:
+      return 'CONFLICT';
+    case 429:
+      return 'RATE_LIMITED';
+    default:
+      return 'INTERNAL';
+  }
 }
 
 function authMessage(reason: AuthError['reason']): string {

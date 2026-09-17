@@ -96,7 +96,12 @@
   position: fixed; left: 50%; bottom: var(--bt-space-8); transform: translateX(-50%);
   z-index: var(--bt-z-toast); display: flex; flex-direction: column-reverse;
   gap: var(--bt-space-3); align-items: center; pointer-events: none;
+  transition: bottom var(--bt-dur-base) var(--bt-ease-out);
 }
+
+/* The bulk bar owns the same bottom-centre slot, so toasts stack above it
+   instead of burying it. */
+.toasterAboveBulkBar { bottom: calc(var(--bt-space-12) + var(--bt-space-5)); }
 .toast {
   pointer-events: auto; display: flex; align-items: center; gap: var(--bt-space-5);
   min-width: 260px; max-width: 460px; padding: var(--bt-space-4) var(--bt-space-4) var(--bt-space-4) var(--bt-space-6);

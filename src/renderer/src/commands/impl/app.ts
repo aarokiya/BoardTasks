@@ -2,17 +2,26 @@ import type { ThemePreference } from '@shared/models';
 import { announce } from '../../lib/announce';
 import { call } from '../../lib/ipc';
 import { useStore } from '../../store/store';
+import { applyTheme } from '../../hooks/useThemeSync';
 import type { CommandId } from '../ids';
 import type { CommandImpl } from '../registry';
 import { targetIds, targetTasks } from './helpers';
+
+const THEME_LABEL: Record<ThemePreference, string> = {
+  light: 'Light appearance',
+  dark: 'Dark appearance',
+  system: 'Appearance follows the system',
+};
 
 function themeCommand(theme: ThemePreference): CommandImpl {
   return {
     run: async () => {
       await call('settings:set', { theme }).catch(() => null);
-      // Theme switching is an attribute write, never a React re-render.
-      if (theme !== 'system') document.documentElement.dataset['theme'] = theme;
-      announce(`Theme: ${theme}`);
+      // applyTheme is the ONE place that writes data-theme: it suppresses
+      // transitions for a frame so nothing cross-fades through the wrong
+      // colours. 'system' resolves in main and arrives as theme:changed.
+      if (theme !== 'system') applyTheme(theme);
+      announce(THEME_LABEL[theme]);
     },
   };
 }

@@ -189,6 +189,16 @@ export function parseRepoAndNumber(raw: string): { owner: string; repo: string; 
   return { owner, repo, number };
 }
 
+/**
+ * Defence in depth on path building. `owner`/`repo` are regex-validated by the
+ * URL parser before they reach the database, but they arrive here from a stored
+ * row, and a path segment that could carry `../` or `?` would let a crafted
+ * link re-point an authenticated, token-bearing request at another endpoint.
+ */
+function seg(value: string | number): string {
+  return encodeURIComponent(String(value));
+}
+
 function headerInt(res: Response, name: string): number | null {
   const v = res.headers.get(name);
   if (v === null || v.trim() === '') return null;
@@ -223,6 +233,10 @@ function searchItemToResult(item: IssueDto): GithubSearchResult | null {
 }
 
 export function createGithubApi(deps: GithubApiDeps): GithubApi {
+  // The one place the PAT is attached to a request. `base` is fixed at
+  // construction from a constant or a dev-only env override — never from a
+  // pasted URL or a stored link's host — so the token cannot follow a
+  // user-supplied hostname off to somebody else's server.
   const base = (deps.baseUrl ?? GITHUB_API_BASE_URL).replace(/\/+$/, '');
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const log = deps.logger;
@@ -308,7 +322,7 @@ export function createGithubApi(deps: GithubApiDeps): GithubApi {
     },
 
     async getIssueOrPull(owner, repo, number): Promise<GithubItem> {
-      const { body: issue } = await request<IssueDto>(`/repos/${owner}/${repo}/issues/${number}`);
+      const { body: issue } = await request<IssueDto>(`/repos/${seg(owner)}/${seg(repo)}/issues/${seg(number)}`);
       const labels = (issue?.labels ?? [])
         .map((l) => ({ name: l.name ?? '', color: (l.color ?? '').replace(/^#/, '') }))
         .filter((l) => l.name !== '');
@@ -328,7 +342,7 @@ export function createGithubApi(deps: GithubApiDeps): GithubApi {
       };
       if (issue?.pull_request == null) return item;
 
-      const { body: pull } = await request<PullDto>(`/repos/${owner}/${repo}/pulls/${number}`);
+      const { body: pull } = await request<PullDto>(`/repos/${seg(owner)}/${seg(repo)}/pulls/${seg(number)}`);
       item.type = 'pull';
       item.mergeable = pull?.mergeable ?? null;
       item.state = pull?.merged === true || pull?.merged_at != null
@@ -344,13 +358,13 @@ export function createGithubApi(deps: GithubApiDeps): GithubApi {
       const sha = pull?.head?.sha ?? null;
       if (sha !== null && sha !== '') {
         item.checks = await optional(async () => {
-          const { body } = await request<CheckRunsDto>(`/repos/${owner}/${repo}/commits/${sha}/check-runs?per_page=100`);
+          const { body } = await request<CheckRunsDto>(`/repos/${seg(owner)}/${seg(repo)}/commits/${seg(sha)}/check-runs?per_page=100`);
           return rollupChecks(body?.check_runs ?? []);
         }, null);
       }
       if (item.state === 'open' || item.state === 'draft') {
         item.reviewDecision = await optional(async () => {
-          const { body } = await request<ReviewDto[]>(`/repos/${owner}/${repo}/pulls/${number}/reviews?per_page=100`);
+          const { body } = await request<ReviewDto[]>(`/repos/${seg(owner)}/${seg(repo)}/pulls/${seg(number)}/reviews?per_page=100`);
           return rollupReviews(Array.isArray(body) ? body : []);
         }, null);
       }

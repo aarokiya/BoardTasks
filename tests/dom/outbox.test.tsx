@@ -35,11 +35,21 @@ describe('OutboxSheet', () => {
     expect(await screen.findByText('Everything is synced')).toBeInTheDocument();
   });
 
-  it('lists entries with a human error and the attempt count', async () => {
+  it('lists entries with a human error, the raw detail and how often it was tried', async () => {
     await mountSheet([entry()]);
     expect(await screen.findByText(/Rename "Book flights"/)).toBeInTheDocument();
-    expect(screen.getByText(/rate-limiting/i)).toBeInTheDocument();
-    expect(screen.getByText(/3/)).toBeInTheDocument();
+    expect(screen.getByText(/limiting how fast/i)).toBeInTheDocument();
+    // The raw server text is kept, but demoted below the sentence a person reads.
+    expect(screen.getByText(/rateLimitExceeded/)).toBeInTheDocument();
+    expect(screen.getByText('Tried 3 times')).toBeInTheDocument();
+    // No operation codes in user-facing copy.
+    expect(screen.queryByText(/task\.update/)).toBeNull();
+  });
+
+  it('says nothing about attempts on a first try', async () => {
+    await mountSheet([entry({ attempts: 1, status: 'pending', lastError: null, lastErrorCode: null })]);
+    await screen.findByText(/Rename "Book flights"/);
+    expect(screen.queryByText(/Attempt|Tried/)).toBeNull();
   });
 
   it('retries a single entry', async () => {

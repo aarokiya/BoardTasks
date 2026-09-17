@@ -111,6 +111,21 @@ describe('design tokens', () => {
       expect(failures).toEqual([]);
     });
 
+    /**
+     * Quaternary is the supporting tier (list names, counts, placeholders). It
+     * is deliberately lighter than tertiary, so it is held to 4.5:1 on the pane
+     * background it is actually read on, and 3:1 everywhere else — not exempt.
+     */
+    it('supporting text reaches 4.5:1 on the pane surface and 3:1 on every surface', () => {
+      expect(contrast('--bt-text-quaternary', '--bt-surface-1', tokens)).toBeGreaterThanOrEqual(4.5);
+      const failures: string[] = [];
+      for (const s of SURFACES) {
+        const ratio = contrast('--bt-text-quaternary', s, tokens);
+        if (ratio < 3) failures.push(`${name}: --bt-text-quaternary on ${s} = ${ratio.toFixed(2)}`);
+      }
+      expect(failures).toEqual([]);
+    });
+
     it('on-accent text reaches 4.5:1 on the accent', () => {
       expect(contrast('--bt-text-on-accent', '--bt-accent', tokens)).toBeGreaterThanOrEqual(4.5);
     });

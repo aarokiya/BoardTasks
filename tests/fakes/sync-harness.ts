@@ -3,7 +3,7 @@ import { createRequestQueue, type RequestQueue } from '../../src/main/api/reques
 import type { Logger } from '../../src/main/logger';
 import { isoAt } from '../../src/main/sync/clock';
 import { createSyncEngine, type SyncEngine } from '../../src/main/sync/engine';
-import { runPull, type PullDeps, type PullOptions, type PullResult } from '../../src/main/sync/pull';
+import { runPrePull, runPull, type PullDeps, type PullOptions, type PullResult } from '../../src/main/sync/pull';
 import { runPush, type PushDeps, type PushResult } from '../../src/main/sync/push';
 import { createFakeClock, createFakeRandom, type FakeClock } from './fake-clock';
 import { createFakeGoogle, type FakeGoogle, type FakeGoogleOptions } from './fake-google-api';
@@ -112,7 +112,9 @@ export function createSyncHarness(opts: HarnessOptions = {}): SyncHarness {
     push: () => runPush(pushDeps),
     pull: (o) => runPull(pullDeps, isoAt(clock.now()), o ?? {}),
     async cycle(o) {
-      const push = await runPush(pushDeps);
+      // Mirrors the engine exactly, pre-push conflict check included.
+      const pre = await runPrePull(pullDeps, isoAt(clock.now()));
+      const push = await runPush({ ...pushDeps, unverifiedLists: pre.unverified });
       const pull = await runPull(pullDeps, isoAt(clock.now()), o ?? {});
       return { push, pull };
     },

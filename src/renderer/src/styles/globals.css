@@ -2,7 +2,10 @@ html { background: var(--bt-bg-app); color: var(--bt-text-primary); font-family:
 body { user-select: none; }
 input, textarea, [contenteditable] { user-select: text; }
 
-:where(button, a, input, textarea, select, [role="treeitem"], [role="option"], [tabindex]):focus-visible {
+/* `[tabindex="-1"]` is excluded on purpose: a dialog takes programmatic focus
+   so screen readers announce it, and that must not draw a ring around the
+   whole sheet. Roving list items keep their ring through the role selectors. */
+:where(button, a, input, textarea, select, [role="treeitem"], [role="option"], [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: none;
   box-shadow: var(--bt-focus-ring);
   border-radius: inherit;
@@ -11,6 +14,30 @@ input, textarea, [contenteditable] { user-select: text; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 :root.bt-theme-switching, :root.bt-theme-switching * { transition: none !important; }
+
+/* Increased-contrast mode: hairlines become visible edges and the supporting
+   text tier collapses into the tertiary tier rather than staying decorative. */
+@media (prefers-contrast: more) {
+  :root, :root[data-theme="light"] {
+    --bt-border-subtle: rgba(0, 0, 0, 0.22);
+    --bt-border: rgba(0, 0, 0, 0.38);
+    --bt-border-strong: rgba(0, 0, 0, 0.7);
+    --bt-text-tertiary: #4b4b55;
+    --bt-text-quaternary: #55555f;
+  }
+
+  :root[data-theme="dark"] {
+    --bt-border-subtle: rgba(255, 255, 255, 0.22);
+    --bt-border: rgba(255, 255, 255, 0.38);
+    --bt-border-strong: rgba(255, 255, 255, 0.72);
+    --bt-text-tertiary: #cfcfd8;
+    --bt-text-quaternary: #bcbcc7;
+  }
+
+  :where(button, a, input, textarea, select, [role="treeitem"], [role="option"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    box-shadow: 0 0 0 2px var(--bt-surface-1), 0 0 0 5px var(--bt-accent);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   :root { --bt-dur-instant: 0.01ms; --bt-dur-fast: 0.01ms; --bt-dur-base: 0.01ms; --bt-dur-slow: 0.01ms; --bt-dur-sheet: 0.01ms; }

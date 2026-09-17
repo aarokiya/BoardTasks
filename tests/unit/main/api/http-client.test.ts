@@ -255,13 +255,38 @@ describe('http-client retry policy', () => {
     expect(rec.calls).toHaveLength(1);
   });
 
-  it('honours Retry-After for the wait between attempts', async () => {
-    const { client, clock, rec } = makeClient([{ status: 429, headers: { 'retry-after': '60' } }, { status: 200, body: {} }]);
+  it('absorbs a SHORT Retry-After itself', async () => {
+    const { client, clock, rec } = makeClient([{ status: 429, headers: { 'retry-after': '1' } }, { status: 200, body: {} }]);
     const p = client.request(GET);
-    await clock.advance(59_000);
+    await clock.advance(500);
     expect(rec.calls).toHaveLength(1);
-    await clock.advance(2_000);
+    await clock.advance(1_000);
     await expect(p).resolves.toMatchObject({ status: 200 });
+    expect(rec.calls).toHaveLength(2);
+  });
+
+  it('hands a LONG Retry-After back to the caller instead of sleeping on it', async () => {
+    // Sleeping 60s inside the request holds the whole cycle open: the status
+    // pill says "Syncing…" for a minute and never shows the countdown.
+    const { client, clock, rec } = makeClient([{ status: 429, headers: { 'retry-after': '60' } }, { status: 200, body: {} }]);
+    const p = client.request(GET).catch((e: unknown) => e);
+    await clock.advance(120_000);
+    const e = await p;
+    expect(e).toBeInstanceOf(RateLimitError);
+    expect((e as RateLimitError).retryAfterMs).toBe(60_000);
+    expect(rec.calls, 'it must not have retried').toHaveLength(1);
+  });
+
+  it('does not sleep on a long exponential backoff either', async () => {
+    // nextDelay passes 2s from the third attempt on; past that the outbox owns
+    // the retry, so the wrapper stops holding the cycle open.
+    const { client, clock, rec } = makeClient([
+      { status: 500 }, { status: 500 }, { status: 500 }, { status: 500 }, { status: 200, body: {} },
+    ]);
+    const p = client.request(GET).catch((e: unknown) => e);
+    await clock.advance(600_000);
+    expect(await p).toBeInstanceOf(ApiError);
+    expect(rec.calls.length).toBeLessThan(5);
   });
 
   it('does not retry a daily quota exhaustion', async () => {

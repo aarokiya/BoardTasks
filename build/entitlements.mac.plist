@@ -1,5 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for a signed build. Four entries, each earning
+  its place; nothing here is a blanket relaxation.
+
+    allow-jit / allow-unsigned-executable-memory
+      Required by V8. Without them Chromium cannot map its code pages and the
+      app dies at launch under the hardened runtime.
+
+    network.client
+      All Google and GitHub HTTP, made from the main process.
+
+    network.server
+      The OAuth loopback listener on 127.0.0.1 with an ephemeral port
+      (src/main/auth/loopback-server.ts). It lives for one sign-in and is
+      closed in a finally block.
+
+  Deliberately ABSENT — do not add without a reason written down here:
+    com.apple.security.get-task-allow            (debugger attach; ships a
+                                                  debuggable binary)
+    com.apple.security.cs.disable-library-validation
+    com.apple.security.cs.allow-dyld-environment-variables
+                                                  (both let injected code into
+                                                  the process; electron-builder
+                                                  signs the unpacked
+                                                  better-sqlite3 .node with the
+                                                  same identity, so neither is
+                                                  needed)
+    any com.apple.security.device.* / personal-information.* entitlement
+-->
 <plist version="1.0">
 <dict>
   <key>com.apple.security.cs.allow-jit</key><true/>

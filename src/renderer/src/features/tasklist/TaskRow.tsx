@@ -20,6 +20,12 @@ export interface TaskRowProps {
   /** Show the owning list's name (smart views only). */
   showListName: boolean;
   subCount?: SubCount;
+  /**
+   * This row carries the tree's single tabIndex=0. It is the focused row when
+   * there is one, and the first row otherwise — without it a freshly loaded
+   * list has no tab stop at all.
+   */
+  tabbable: boolean;
   onToggleComplete: (task: Task, completed: boolean) => void;
   onPointerSelect: (e: ReactMouseEvent, id: string) => void;
   onRowKeyDown: (e: ReactKeyboardEvent, id: string) => void;
@@ -31,7 +37,7 @@ const PRIORITY_GLYPH: Record<number, string> = { 1: '!!!', 2: '!!', 3: '!' };
 const PRIORITY_LABEL: Record<number, string> = { 1: 'High priority', 2: 'Medium priority', 3: 'Low priority' };
 
 export function TaskRow({
-  row, task, showListName, subCount, onToggleComplete, onPointerSelect, onRowKeyDown, onCommitTitle, onOpen,
+  row, task, showListName, subCount, tabbable, onToggleComplete, onPointerSelect, onRowKeyDown, onCommitTitle, onOpen,
 }: TaskRowProps): ReactElement {
   const selected = useStore((st) => st.selection.includes(task.id));
   const focused = useStore((st) => st.focusId === task.id);
@@ -100,7 +106,7 @@ export function TaskRow({
       aria-selected={selected}
       aria-expanded={row.hasChildren ? !row.collapsed : undefined}
       aria-label={nameParts.filter(Boolean).join(', ')}
-      tabIndex={focused ? 0 : -1}
+      tabIndex={tabbable ? 0 : -1}
       className={cx(
         s.row,
         row.depth === 1 && s.depth1,
@@ -126,7 +132,7 @@ export function TaskRow({
       <button
         type="button"
         className="sr-only"
-        tabIndex={focused ? 0 : -1}
+        tabIndex={tabbable ? 0 : -1}
         aria-label={`Reorder ${task.title}`}
         onKeyDown={dragKeyDown}
         {...dragAttrs}

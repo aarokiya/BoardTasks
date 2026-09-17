@@ -140,10 +140,11 @@ export function createRequestQueue(opts: RequestQueueOptions): RequestQueue {
 
     if (circuitOpenUntil !== null) {
       const err = circuitError ?? new RateLimitError(circuitOpenUntil - clock.now(), true, 'dailyLimitExceeded');
-      for (const e of queue.splice(0)) {
-        active.delete(e.serialKey ?? '');
-        e.reject(err);
-      }
+      // Reject only. A queued entry never held its serialKey — the key is
+      // claimed when it is dequeued — so releasing it here would unlock a
+      // request that is still running and let a second one for the same list
+      // overtake it.
+      for (const e of queue.splice(0)) e.reject(err);
       return;
     }
 

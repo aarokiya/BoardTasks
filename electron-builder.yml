@@ -5,10 +5,16 @@ directories:
   buildResources: build
   output: dist
 
+# Allowlist, not a denylist: only the build output and the manifest ship.
+# Source, tests, docs, scripts and any .env file are outside it by construction;
+# the explicit negations below are belt-and-braces against a future widening.
 files:
   - out/**
   - package.json
-  - "!**/*.map"
+  - "!**/*.map"          # sourcemaps are built (see electron.vite.config.ts) but never shipped
+  - "!**/*.ts"
+  - "!**/.env*"
+  - "!**/.DS_Store"
 
 asar: true
 asarUnpack:

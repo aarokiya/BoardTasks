@@ -3,6 +3,8 @@ import type { AuthState } from '../../../../src/shared/models';
 import {
   createScheduler,
   DEFAULT_INTERVALS,
+  MIN_RETRY_WAKE_MS,
+  type CycleOutcome,
   type Scheduler,
   type SyncTrigger,
 } from '../../../../src/main/sync/scheduler';
@@ -16,16 +18,21 @@ interface Harness {
   setAuth(s: AuthState): void;
   setFocused(f: boolean): void;
   setBattery(b: boolean): void;
+  setOnline(o: boolean): void;
+  /** What every cycle from now on reports back. */
+  setOutcome(o: CycleOutcome | undefined): void;
   /** Hold the next cycle open until the returned function is called. */
   block(): () => void;
 }
 
-function harness(over: { focused?: boolean } = {}): Harness {
+function harness(over: { focused?: boolean; floorMs?: () => number } = {}): Harness {
   const clock = createFakeClock();
   const cycles: Array<{ full: boolean; trigger: SyncTrigger }> = [];
   let auth: AuthState = 'signed_in';
   let focused = over.focused ?? true;
   let battery = false;
+  let online = true;
+  let outcome: CycleOutcome | undefined;
   let gate: Promise<void> | null = null;
   let release: (() => void) | null = null;
 
@@ -39,11 +46,13 @@ function harness(over: { focused?: boolean } = {}): Harness {
         gate = null;
         await g;
       }
+      return outcome;
     },
-    isOnline: () => true,
+    isOnline: () => online,
     authState: () => auth,
     isOnBattery: () => battery,
     isFocused: () => focused,
+    nextPollFloorMs: over.floorMs,
   });
 
   return {
@@ -58,6 +67,12 @@ function harness(over: { focused?: boolean } = {}): Harness {
     },
     setBattery: (b) => {
       battery = b;
+    },
+    setOnline: (o) => {
+      online = o;
+    },
+    setOutcome: (o) => {
+      outcome = o;
     },
     block() {
       gate = new Promise<void>((resolve) => {
@@ -291,5 +306,92 @@ describe('scheduler pausing', () => {
     await h.clock.advance(DEFAULT_INTERVALS.focusedMs * 3);
     expect(h.cycles).toHaveLength(1);
     expect(h.clock.pending()).toBe(0);
+  });
+});
+
+describe('scheduler: outbox backoff wake', () => {
+  it('wakes when the soonest backoff elapses instead of waiting for the poll', async () => {
+    const h = harness();
+    h.setOutcome({ retryAt: h.clock.now() + 2_000 });
+    h.scheduler.start();
+    await h.clock.flush();
+    expect(h.cycles.map((c) => c.trigger)).toEqual(['startup']);
+    expect(h.scheduler.nextPollAt()).toBe(h.clock.now() + 2_000);
+    h.setOutcome({ retryAt: null });
+
+    await h.clock.advance(1_999);
+    expect(h.cycles).toHaveLength(1);
+    await h.clock.advance(1);
+    expect(h.cycles.map((c) => c.trigger)).toEqual(['startup', 'retry']);
+  });
+
+  it('a retry further away than the poll changes nothing', async () => {
+    const h = harness();
+    h.setOutcome({ retryAt: h.clock.now() + DEFAULT_INTERVALS.focusedMs * 2 });
+    h.scheduler.start();
+    await h.clock.flush();
+    expect(h.scheduler.nextPollAt()).toBe(h.clock.now() + DEFAULT_INTERVALS.focusedMs);
+    await h.clock.advance(DEFAULT_INTERVALS.focusedMs);
+    expect(h.cycles.at(-1)!.trigger).toBe('interval');
+  });
+
+  it('never wakes for a backoff while offline — every wake would fail and burn an attempt', async () => {
+    const h = harness();
+    h.setOnline(false);
+    h.setOutcome({ retryAt: h.clock.now() + 2_000 });
+    h.scheduler.start();
+    await h.clock.flush();
+    expect(h.cycles).toHaveLength(1);
+    await h.clock.advance(10_000);
+    expect(h.cycles).toHaveLength(1);
+
+    // The route coming back is what re-arms it.
+    h.setOnline(true);
+    h.scheduler.networkChanged(true);
+    await h.clock.flush();
+    expect(h.cycles.map((c) => c.trigger)).toEqual(['startup', 'network']);
+    await h.clock.advance(2_000);
+    expect(h.cycles.at(-1)!.trigger).toBe('retry');
+  });
+
+  it('a Retry-After floor still wins over a sooner backoff', async () => {
+    const h = harness({ floorMs: () => 30_000 });
+    h.setOutcome({ retryAt: h.clock.now() + 2_000 });
+    h.scheduler.start();
+    await h.clock.flush();
+    expect(h.scheduler.nextPollAt()).toBe(h.clock.now() + 30_000);
+  });
+
+  it('a backoff already in the past wakes promptly, but never in a busy loop', async () => {
+    const h = harness();
+    h.setOutcome({ retryAt: h.clock.now() - 1 });
+    h.scheduler.start();
+    await h.clock.flush();
+    expect(h.scheduler.nextPollAt()).toBe(h.clock.now() + MIN_RETRY_WAKE_MS);
+    // Even a cycle that keeps reporting a stale time is paced, not spun.
+    await h.clock.advance(MIN_RETRY_WAKE_MS * 4);
+    expect(h.cycles).toHaveLength(5);
+  });
+
+  it('a cycle that reports nothing clears the previous wake', async () => {
+    const h = harness();
+    h.setOutcome({ retryAt: h.clock.now() + 5_000 });
+    h.scheduler.start();
+    await h.clock.flush();
+    h.setOutcome({ retryAt: null });
+    h.scheduler.localEdit();
+    await h.clock.advance(DEFAULT_INTERVALS.localEditDebounceMs);
+    expect(h.cycles.map((c) => c.trigger)).toEqual(['startup', 'local-edit']);
+    expect(h.scheduler.nextPollAt()).toBe(h.clock.now() + DEFAULT_INTERVALS.focusedMs);
+  });
+
+  it('survives a focus change: the wake is re-armed, not lost', async () => {
+    const h = harness();
+    h.setOutcome({ retryAt: h.clock.now() + 2_000 });
+    h.scheduler.start();
+    await h.clock.flush();
+    h.setFocused(false);
+    h.scheduler.setFocused(false);
+    expect(h.scheduler.nextPollAt()).toBe(h.clock.now() + 2_000);
   });
 });

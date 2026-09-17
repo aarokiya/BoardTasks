@@ -76,6 +76,14 @@ export function TaskList(): ReactElement {
   const taskRows = useMemo(() => displayRows.filter((r) => r.kind === 'task'), [displayRows]);
   const sortableIds = useMemo(() => taskRows.map((r) => r.id), [taskRows]);
 
+  // Roving tabindex: exactly one row is tabbable. Falls back to the first row
+  // so the list is always reachable with Tab, even before anything is focused.
+  const focusId = useStore((st) => st.focusId);
+  const rovingId = useMemo(
+    () => (focusId !== null && taskRows.some((r) => r.id === focusId) ? focusId : (taskRows[0]?.id ?? null)),
+    [focusId, taskRows],
+  );
+
   const focusRow = useCallback(
     (id: string) => {
       setFocus(id);
@@ -192,6 +200,11 @@ export function TaskList(): ReactElement {
 
   const onRowKeyDown = useCallback(
     (e: ReactKeyboardEvent, id: string) => {
+      // ⌘/⌃/⌥ chords belong to the global shortcut scope: without this, the row
+      // swallows ⌘K (palette) as "k = previous task" and ⌥↑/↓ (reorder) as
+      // arrow navigation, and preventDefault() stops them ever reaching it.
+      // Shift is ours — it extends the selection.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const task = useStore.getState().tasks[id];
       switch (e.key) {
         case 'j':
@@ -278,6 +291,7 @@ export function TaskList(): ReactElement {
               task={task}
               showListName={showListName}
               subCount={subCounts[task.id]}
+              tabbable={task.id === rovingId}
               onToggleComplete={onToggleComplete}
               onPointerSelect={onPointerSelect}
               onRowKeyDown={onRowKeyDown}
@@ -288,7 +302,7 @@ export function TaskList(): ReactElement {
         </div>
       );
     },
-    [collapsedGroups, toggleGroup, dnd.indicatorRowId, dnd.projection, showListName, subCounts, onToggleComplete, onPointerSelect, onRowKeyDown, onCommitTitle, onOpen],
+    [collapsedGroups, toggleGroup, dnd.indicatorRowId, dnd.projection, showListName, subCounts, rovingId, onToggleComplete, onPointerSelect, onRowKeyDown, onCommitTitle, onOpen],
   );
 
   const filterQuery = useStore((st) => st.filterQuery);

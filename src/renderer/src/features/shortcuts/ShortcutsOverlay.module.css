@@ -52,14 +52,18 @@
 .search::placeholder { color: var(--bt-text-quaternary); }
 
 .body {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--bt-space-6) var(--bt-space-9);
+  /* Multi-column, not grid: the groups are wildly different lengths, and only
+     column flow balances them instead of leaving a Task-sized hole under Create. */
+  columns: 2;
+  column-gap: var(--bt-space-9);
   padding: var(--bt-space-6);
   overflow-y: auto;
 }
 
-.group { break-inside: avoid; }
+.group {
+  break-inside: avoid;
+  margin-bottom: var(--bt-space-6);
+}
 
 .groupTitle {
   margin-bottom: var(--bt-space-3);
@@ -87,7 +91,7 @@
 .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .empty {
-  grid-column: 1 / -1;
+  column-span: all;
   padding: var(--bt-space-9) 0;
   text-align: center;
   color: var(--bt-text-tertiary);

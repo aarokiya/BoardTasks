@@ -63,6 +63,14 @@ Backoff is exponential with jitter in `[exp/2, exp)`, base 1s, cap 5min. Jitter
 is not decoration: a laptop waking with 200 queued entries would otherwise retry
 them all in lockstep and cause the very 429s the backoff exists to avoid.
 
+The backoff is honoured by a timer, not by the poll. `runPush` reports the
+soonest `next_attempt_at` still ahead of it (`retryAt`), the cycle hands that to
+the scheduler, and the scheduler wakes for it with the `retry` trigger — while
+online. Without this a 2s backoff would wait for the next poll, a minute away
+when focused and fifteen on battery. Offline the wake is suppressed: every
+attempt would fail, and eight of them park the entry within minutes; the
+`network` trigger re-runs the cycle when the route is back.
+
 ### `tasks.insert` is not idempotent
 
 A lost 500 might mean the task *was* created, so the HTTP wrapper never retries
@@ -113,6 +121,14 @@ list (case-insensitive, trimmed) is **bound** to it and the create is cancelled
 
 ## Merge policy
 
+> **Implementation status (verified 2026-09-17):** the policy below is what the
+> merge code implements, but in practice it is **not reached for a both-sides
+> edit**. `runPush` runs before `runPull` (`src/main/sync/engine.ts:181-187`) and
+> `src/main/sync/push.ts:325` sends no `If-Match`, so the local edit is pushed
+> blind and the pull then sees only our own write. Last-write-wins is the actual
+> behaviour today. See [`feature-matrix.md`](feature-matrix.md) F1/F2 for the
+> measurements and the suggested fix.
+
 Three-way, per field, over `base_json` (last-known server state) + `dirty_fields`
 (what the user changed since that base).
 
@@ -151,7 +167,7 @@ already been optimistically updated by the time the entry runs.
 |---|---|
 | Do tombstones flow with `updatedMin`? | The pull is an idempotent **merge**, not a delta application, and the full reconcile catches deletes either way. The whole pull suite runs under **both** settings (`describe.each`). |
 | Is `updatedMin` inclusive? | The 2-minute read-back skew makes it irrelevant; re-merging an item is a no-op. |
-| Is `If-Match` / 412 honoured? | Sent only when an etag is known; a 412 is classified as a conflict and re-pulled. Never required for correctness. |
+| Is `If-Match` / 412 honoured? | *Designed as:* sent when an etag is known, and a 412 classified as a conflict and re-pulled. **Not currently wired** — `push.ts:325` omits the etag argument, so no request ever carries `If-Match` and the 412 branch in `http-client.ts:176` is dead. |
 | The real rate limit | AIMD converges on it: halve the token-bucket refill on a 429, recover 10% every 30s. |
 | `showHidden` default | Never relied on — all four `show*` flags are always explicit. |
 

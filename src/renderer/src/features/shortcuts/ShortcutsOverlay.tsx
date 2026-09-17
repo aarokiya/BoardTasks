@@ -62,7 +62,7 @@ function ShortcutsSheet(): ReactElement {
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className={s.header}>
-          <h2 className={s.title}>Keyboard Shortcuts</h2>
+          <h2 className={s.title}>Keyboard shortcuts</h2>
           <input
             ref={inputRef}
             className={s.search}

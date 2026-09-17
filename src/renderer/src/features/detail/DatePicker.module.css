@@ -14,11 +14,13 @@
 
 .chip {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--bt-space-3);
-  height: 26px;
-  padding: 0 var(--bt-space-4);
+  min-height: 26px;
+  padding: 0 var(--bt-space-3);
+  white-space: nowrap;
+  overflow: hidden;
   border-radius: var(--bt-radius-xs);
   font-size: var(--bt-text-12);
   color: var(--bt-text-primary);
@@ -28,7 +30,10 @@
 
 .chip:hover { background: var(--bt-surface-3); }
 
+.chipLabel { overflow: hidden; text-overflow: ellipsis; }
+
 .chipHint {
+  flex: none;
   color: var(--bt-text-quaternary);
   font-variant-numeric: tabular-nums;
   font-size: var(--bt-text-11);

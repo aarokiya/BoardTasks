@@ -42,9 +42,9 @@ describe('resolveBaseUrl', () => {
     expect(resolveBaseUrl('http://127.0.0.1:1234/')).toBe('http://127.0.0.1:1234/tasks/v1');
   });
 
-  it('reads BT_GOOGLE_BASE_URL when no explicit override is given', () => {
+  it('never reads BT_GOOGLE_BASE_URL itself — only an explicit override counts', () => {
     process.env['BT_GOOGLE_BASE_URL'] = 'http://localhost:9';
-    expect(resolveBaseUrl()).toBe('http://localhost:9/tasks/v1');
+    expect(resolveBaseUrl()).toBe(GOOGLE_TASKS_BASE_URL);
   });
 });
 

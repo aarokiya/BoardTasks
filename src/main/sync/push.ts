@@ -16,10 +16,10 @@ import {
   type OutboxRow,
   type TaskWireFields,
 } from '../db/repositories/outbox';
-import { allTaskRowsInList, bindTaskRemote, getTaskRow, rawUpdate } from '../db/repositories/tasks';
+import { allTaskRowsInList, bindTaskRemote, getTaskRow, hasUnresolvedConflict, rawUpdate } from '../db/repositories/tasks';
 import type { Clock, Random } from './clock';
 import { isoAt, parseInstant } from './clock';
-import { BLOCKED_PASSES_BEFORE_PARK, classifyError, messageOf, nextDelay, PARK_AFTER } from './backoff';
+import { BLOCKED_PASSES_BEFORE_PARK, classifyError, messageOf, nextDelay, PARK_AFTER, type OutboxErrorCode } from './backoff';
 import { baseOfRemote, emptyChanges, MERGE_FIELDS, type MergeChanges, parseBase, parseDirty } from './merge';
 
 /**
@@ -47,6 +47,12 @@ export interface PushDeps {
   queue: RequestQueue;
   /** `null` = success. */
   observe(error: unknown): void;
+  /**
+   * Lists whose pre-push conflict check could not run this cycle. An
+   * already-synced task in one of them is held back rather than pushed blind:
+   * we have no way to know the server's copy did not move.
+   */
+  unverifiedLists?: ReadonlySet<string>;
 }
 
 export interface PushResult {
@@ -60,10 +66,21 @@ export interface PushResult {
   /** Set when a rate limit aborted the drain. */
   retryAfterMs: number | null;
   dailyLimit: boolean;
+  /**
+   * Epoch ms of the soonest `next_attempt_at` still ahead of us: an entry we
+   * skipped because its backoff has not elapsed, or one we just rescheduled.
+   * The scheduler wakes for it; otherwise a 2s backoff would wait for the next
+   * poll, which is a minute away at best and fifteen on battery.
+   */
+  retryAt: number | null;
 }
 
 function emptyResult(): PushResult {
-  return { changes: emptyChanges(), listsTouched: new Set(), pushed: 0, parked: 0, blocked: 0, authError: null, retryAfterMs: null, dailyLimit: false };
+  return { changes: emptyChanges(), listsTouched: new Set(), pushed: 0, parked: 0, blocked: 0, authError: null, retryAfterMs: null, dailyLimit: false, retryAt: null };
+}
+
+function noteRetry(result: PushResult, atMs: number): void {
+  result.retryAt = result.retryAt === null ? atMs : Math.min(result.retryAt, atMs);
 }
 
 interface Ready {
@@ -77,6 +94,8 @@ interface Ready {
   destListRemoteId: string | undefined;
   /** The list the SERVER currently holds this task in (cross-list moves). */
   sourceListRemoteId: string;
+  /** The etag of the last server state we merged, for If-Match. */
+  taskEtag: string | null;
 }
 type Readiness = Ready | { ok: false; reason: string } | { ok: false; reason: string; drop: true };
 
@@ -92,8 +111,20 @@ export async function runPush(deps: PushDeps): Promise<PushResult> {
 
   for (const row of rows) {
     if (stalled.has(row.entity_id)) continue;
-    if (row.status === 'pending' && (parseInstant(row.next_attempt_at) ?? 0) > nowMs) {
+    const dueAt = row.status === 'pending' ? (parseInstant(row.next_attempt_at) ?? 0) : 0;
+    if (dueAt > nowMs) {
+      noteRetry(result, dueAt);
       stalled.add(row.entity_id);
+      continue;
+    }
+
+    // Held back, not failed: no attempt is burned and `blocked_passes` is
+    // untouched, so neither of these can park an entry while it waits.
+    const hold = holdReason(deps, row);
+    if (hold !== null) {
+      updateOutbox(row.id, { status: 'blocked', last_error: hold.reason, last_error_code: hold.code });
+      stalled.add(row.entity_id);
+      result.blocked++;
       continue;
     }
 
@@ -107,11 +138,11 @@ export async function runPush(deps: PushDeps): Promise<PushResult> {
       }
       const passes = row.blocked_passes + 1;
       if (passes >= BLOCKED_PASSES_BEFORE_PARK) {
-        updateOutbox(row.id, { status: 'parked', blocked_passes: passes, last_error: readiness.reason, last_error_code: 'dependency_failed' });
+        updateOutbox(row.id, { status: 'parked', blocked_passes: passes, last_error: readiness.reason, last_error_code: 'DEPENDENCY_FAILED' });
         result.parked++;
       } else {
         // Blocked is not a failure: attempts is deliberately untouched.
-        updateOutbox(row.id, { status: 'blocked', blocked_passes: passes, last_error: readiness.reason, last_error_code: 'blocked' });
+        updateOutbox(row.id, { status: 'blocked', blocked_passes: passes, last_error: readiness.reason, last_error_code: 'DEPENDENCY_FAILED' });
         result.blocked++;
       }
       stalled.add(row.entity_id);
@@ -140,6 +171,22 @@ export async function runPush(deps: PushDeps): Promise<PushResult> {
   return result;
 }
 
+/**
+ * Reasons to leave an entry queued without even trying. Both are "we cannot
+ * safely send this yet", never "this failed".
+ */
+function holdReason(deps: PushDeps, row: OutboxRow): { reason: string; code: OutboxErrorCode } | null {
+  if (row.entity !== 'task' || row.op === 'task.clear') return null;
+  if (hasUnresolvedConflict(row.entity_id)) {
+    return { reason: 'This task changed on Google too. Choose which version to keep.', code: 'CONFLICT' };
+  }
+  const task = deps.unverifiedLists?.size ? getTaskRow(row.entity_id) : null;
+  if (task && task.remote_id !== null && deps.unverifiedLists!.has(task.list_id)) {
+    return { reason: "Couldn't check Google for newer changes to this list; holding this change back.", code: 'NETWORK' };
+  }
+  return null;
+}
+
 function handleFailure(deps: PushDeps, row: OutboxRow, e: unknown, nowMs: number, result: PushResult): boolean {
   const c = classifyError(e);
 
@@ -155,9 +202,27 @@ function handleFailure(deps: PushDeps, row: OutboxRow, e: unknown, nowMs: number
     // Not the entry's fault — do not advance `attempts` towards parking.
     const wait = c.retryAfterMs ?? nextDelay(row.attempts + 1, deps.random);
     updateOutbox(row.id, { status: 'pending', next_attempt_at: isoAt(nowMs + wait), last_error: c.message, last_error_code: c.code });
+    noteRetry(result, nowMs + wait);
     result.retryAfterMs = wait;
     result.dailyLimit = c.daily;
     return true;
+  }
+
+  if (c.disposition === 'conflict') {
+    // A 412: the server's copy moved under our If-Match. Don't fight it — the
+    // next cycle's pre-push pull merges the remote change and the entry is
+    // re-derived from whatever is still dirty (or raised as a conflict). The
+    // attempt counter still advances so a precondition that never clears parks
+    // rather than looping forever.
+    const attempts = row.attempts + 1;
+    const patch = { last_error: c.message, last_error_code: c.code };
+    if (attempts >= PARK_AFTER) {
+      updateOutbox(row.id, { status: 'parked', attempts, ...patch });
+      result.parked++;
+    } else {
+      updateOutbox(row.id, { status: 'pending', attempts, next_attempt_at: isoAt(nowMs), ...patch });
+    }
+    return false;
   }
 
   if (c.disposition === 'permanent') {
@@ -175,13 +240,15 @@ function handleFailure(deps: PushDeps, row: OutboxRow, e: unknown, nowMs: number
     result.parked++;
     return false;
   }
+  const retryAt = nowMs + nextDelay(attempts, deps.random);
   updateOutbox(row.id, {
     status: 'pending',
     attempts,
-    next_attempt_at: isoAt(nowMs + nextDelay(attempts, deps.random)),
+    next_attempt_at: isoAt(retryAt),
     last_error: c.message || messageOf(e),
     last_error_code: c.code,
   });
+  noteRetry(result, retryAt);
   return false;
 }
 
@@ -205,10 +272,10 @@ function resolveList(row: OutboxRow, payload: OutboxPayload): Readiness {
   if (!list) return drop('The list no longer exists locally.');
   if (payload.kind === 'list.create') {
     if (list.remote_id !== null) return drop('The list is already on Google.');
-    return { ok: true, listRemoteId: '', listId: list.id, taskRemoteId: null, parentRemoteId: undefined, previousRemoteId: undefined, destListRemoteId: undefined, sourceListRemoteId: '' };
+    return { ok: true, listRemoteId: '', listId: list.id, taskRemoteId: null, parentRemoteId: undefined, previousRemoteId: undefined, destListRemoteId: undefined, sourceListRemoteId: '', taskEtag: null };
   }
   if (list.remote_id === null) return blocked('Waiting for the list to be created on Google.');
-  return { ok: true, listRemoteId: list.remote_id, listId: list.id, taskRemoteId: null, parentRemoteId: undefined, previousRemoteId: undefined, destListRemoteId: undefined, sourceListRemoteId: list.remote_id };
+  return { ok: true, listRemoteId: list.remote_id, listId: list.id, taskRemoteId: null, parentRemoteId: undefined, previousRemoteId: undefined, destListRemoteId: undefined, sourceListRemoteId: list.remote_id, taskEtag: null };
 }
 
 function resolveTask(row: OutboxRow, payload: OutboxPayload): Readiness {
@@ -216,7 +283,7 @@ function resolveTask(row: OutboxRow, payload: OutboxPayload): Readiness {
     const list = getListRow(row.entity_id);
     if (!list) return drop('The list no longer exists locally.');
     if (list.remote_id === null) return blocked('Waiting for the list to be created on Google.');
-    return { ok: true, listRemoteId: list.remote_id, listId: list.id, taskRemoteId: null, parentRemoteId: undefined, previousRemoteId: undefined, destListRemoteId: undefined, sourceListRemoteId: list.remote_id };
+    return { ok: true, listRemoteId: list.remote_id, listId: list.id, taskRemoteId: null, parentRemoteId: undefined, previousRemoteId: undefined, destListRemoteId: undefined, sourceListRemoteId: list.remote_id, taskEtag: null };
   }
 
   const task = getTaskRow(row.entity_id);
@@ -265,6 +332,7 @@ function resolveTask(row: OutboxRow, payload: OutboxPayload): Readiness {
     previousRemoteId: resolvePrevious(task, destListId, parentId),
     destListRemoteId: destListRemoteId === sourceListRemoteId ? undefined : destListRemoteId,
     sourceListRemoteId,
+    taskEtag: task.etag,
   };
 }
 
@@ -322,15 +390,24 @@ async function apply(deps: PushDeps, row: OutboxRow, ctx: Ready, now: string, re
     case 'task.update': {
       const fields = rederive(row, payload.fields);
       if (fields === null) return; // a pull already merged this away
-      const remote = await deps.api.patchTask(ctx.listRemoteId, ctx.taskRemoteId!, bodyFromWire(fields, nowMs));
-      settle(row.entity_id, fields, remote, ctx.listRemoteId, now);
+      // The SOURCE list, not the local one: a cross-list move queued ahead of
+      // us has already changed `list_id` locally while the server still holds
+      // the task where it was, and patching the wrong list is a 404.
+      // If-Match carries the etag of the last server state we merged, so a copy
+      // that moved since then answers 412 instead of being overwritten. Google's
+      // support for this is unconfirmed, which is why it is the SECOND line of
+      // defence behind the pre-push pull, never the only one.
+      const remote = await deps.api.patchTask(ctx.sourceListRemoteId, ctx.taskRemoteId!, bodyFromWire(fields, nowMs), ctx.taskEtag);
+      settle(row.entity_id, fields, remote, ctx.sourceListRemoteId, now);
       result.changes.touched.add(row.entity_id);
       return;
     }
 
     case 'task.delete': {
       try {
-        await deps.api.deleteTask(ctx.listRemoteId, ctx.taskRemoteId!);
+        // Same reason as the update above — and here a misaddressed request is
+        // worse, because a 404 is deliberately treated as "already gone".
+        await deps.api.deleteTask(ctx.sourceListRemoteId, ctx.taskRemoteId!);
       } catch (e) {
         // Already gone is exactly the state we wanted.
         if (!(e instanceof ApiError && e.status === 404)) throw e;

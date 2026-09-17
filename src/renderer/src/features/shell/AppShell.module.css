@@ -75,6 +75,11 @@
 @keyframes slide-in-left { from { transform: translateX(-100%); } to { transform: none; } }
 
 /* Detail as a right sheet / full-screen push ----------------------------- */
+.detailScrim {
+  position: absolute; inset: 0; z-index: calc(var(--bt-z-overlay) - 1);
+  background: var(--bt-scrim);
+  animation: fade-in var(--bt-dur-fast) var(--bt-ease-out);
+}
 .detailSheet {
   position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--bt-z-overlay);
   box-shadow: var(--bt-shadow-xl);

@@ -57,12 +57,25 @@ export function registerShellCommands(): void {
       },
     },
     'view.showCompleted': {
-      enabled: ({ store }) => selectCurrentListId(store) !== null,
-      run: ({ store }) => {
+      // Toggles the global default (what the View menu's checkbox reflects). A per-list
+      // override for the current list is cleared so the new default is what you see.
+      run: async ({ store }) => {
+        const next = !(store.settings?.showCompletedInLists ?? false);
         const listId = selectCurrentListId(store);
-        if (!listId) return;
-        store.toggleShowCompleted(listId);
-        announce(useStore.getState().showCompletedByList[listId] ? 'Showing completed tasks' : 'Hiding completed tasks');
+        if (listId && listId in store.showCompletedByList) {
+          useStore.setState((st) => {
+            const next = { ...st.showCompletedByList };
+            delete next[listId];
+            return { showCompletedByList: next };
+          });
+        }
+        try {
+          const settings = await call('settings:set', { showCompletedInLists: next });
+          useStore.setState({ settings });
+          announce(next ? 'Showing completed tasks in lists' : 'Hiding completed tasks in lists');
+        } catch {
+          store.toast({ level: 'error', message: "Couldn't save the completed-tasks preference." });
+        }
       },
     },
     'edit.find': {

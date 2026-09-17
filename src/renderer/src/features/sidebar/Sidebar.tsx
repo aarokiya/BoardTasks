@@ -48,6 +48,11 @@ export function Sidebar({ rail, onNavigate }: SidebarProps): ReactElement {
     [visibleViews, visibleLists],
   );
 
+  // Roving tabindex: the remembered key can go stale (Overdue hides itself at
+  // zero, a list is deleted), which would leave the whole sidebar with no tab
+  // stop. Fall back to the first row instead.
+  const activeKey = keys.includes(focusKey) ? focusKey : (keys[0] ?? '');
+
   const navigate = useCallback(
     (v: ViewId) => {
       setView(v);
@@ -59,14 +64,14 @@ export function Sidebar({ rail, onNavigate }: SidebarProps): ReactElement {
 
   const moveFocus = useCallback(
     (delta: number) => {
-      const i = keys.indexOf(focusKey);
+      const i = keys.indexOf(activeKey);
       const next = keys[Math.min(keys.length - 1, Math.max(0, (i < 0 ? 0 : i) + delta))];
       if (!next) return;
       setFocusKey(next);
       const id = next.startsWith('list:') ? `bt-list-${next.slice(5)}` : `bt-view-${next}`;
       document.getElementById(id)?.focus();
     },
-    [keys, focusKey],
+    [keys, activeKey],
   );
 
   const onTreeKeyDown = useCallback(
@@ -134,7 +139,7 @@ export function Sidebar({ rail, onNavigate }: SidebarProps): ReactElement {
         aria-current={current ? 'page' : undefined}
         aria-selected={current}
         aria-label={label}
-        tabIndex={focusKey === meta.id ? 0 : -1}
+        tabIndex={activeKey === meta.id ? 0 : -1}
         className={cx(s.row, rail && s.railRow, current && s.rowCurrent)}
         onClick={() => navigate(meta.id)}
         onFocus={() => setFocusKey(meta.id)}
@@ -148,6 +153,8 @@ export function Sidebar({ rail, onNavigate }: SidebarProps): ReactElement {
             className={cx(
               rail ? s.railBadge : s.badge,
               rail && urgent && s.railBadgeUrgent,
+              rail && danger && s.railBadgeDanger,
+              rail && muted && s.railBadgeMuted,
               !rail && urgent && s.badgeUrgent,
               !rail && danger && s.badgeDanger,
               !rail && muted && s.badgeMuted,
@@ -186,7 +193,7 @@ export function Sidebar({ rail, onNavigate }: SidebarProps): ReactElement {
                   count={counts.lists[l.id] ?? 0}
                   current={view === `list:${l.id}`}
                   rail={rail}
-                  tabIndex={focusKey === `list:${l.id}` ? 0 : -1}
+                  tabIndex={activeKey === `list:${l.id}` ? 0 : -1}
                   onActivate={() => navigate(`list:${l.id}`)}
                   onFocus={() => setFocusKey(`list:${l.id}`)}
                   onKeyDown={onTreeKeyDown}
@@ -203,7 +210,7 @@ export function Sidebar({ rail, onNavigate }: SidebarProps): ReactElement {
         {authState === 'signed_out' || authState === 'no_credentials' || authState === 'reauth_required' ? (
           <p className={s.signedOutNote}>
             You&rsquo;re signed out. Everything here is the copy stored on this Mac — you can still browse and edit it, and
-            changes sync once you sign back in.
+            changes sync once you sign in.
           </p>
         ) : null}
       </div>

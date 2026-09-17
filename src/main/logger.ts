@@ -9,14 +9,23 @@ const LEVELS: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40
  * console.log(credentials) — make it harmless.
  */
 const SCRUB_PATTERNS: RegExp[] = [
-  /ya29\.[\w.-]+/g,                 // Google access token
-  /1\/\/[\w-]{20,}/g,               // Google refresh token
-  /GOCSPX-[\w-]+/g,                 // Google client secret
-  /gh[pousr]_[A-Za-z0-9]{20,}/g,     // GitHub tokens
+  /ya29\.[\w.-]+/g,                  // Google access token
+  /1\/\/[\w-]{20,}/g,                // Google refresh token
+  /GOCSPX-[\w-]+/g,                  // Google client secret
+  /gh[pousr]_[A-Za-z0-9]{20,}/g,     // GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
   /github_pat_[A-Za-z0-9_]{20,}/g,   // GitHub fine-grained PAT
+  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+/g, // any JWT (id_token)
   /(Bearer\s+)[\w.-]+/gi,
-  /("?(?:access_token|refresh_token|client_secret|token|password)"?\s*[:=]\s*"?)[^\s",}]+/gi,
+  /(Basic\s+)[A-Za-z0-9+/]{8,}={0,2}/g,
+  // Secrets carried in a URL query string. net.fetch and undici errors echo the
+  // request URL, and the OAuth authorization code and refresh token both travel
+  // that way; the value stops at `&` so the rest of the URL stays readable.
+  /([?&](?:access_token|refresh_token|id_token|token|code|code_verifier|client_secret|assertion|password|api_key|apikey|key)=)[^&\s"'<>]+/gi,
+  // JSON bodies, object dumps and header maps. `code` is deliberately absent
+  // here: `code: 'ENOTFOUND'` is not a secret and redacting it blinds the log.
+  /("?(?:access_token|refresh_token|id_token|client_secret|code_verifier|authorization|token|password|api_key|private_key)"?\s*[:=]\s*"?)[^\s",}&]+/gi,
 ];
+
 const knownSecrets = new Set<string>();
 
 export function registerSecret(value: string | null | undefined): void {
@@ -39,7 +48,8 @@ export function initLogger(dir: string, level: Level = 'info'): void {
   logDir = dir;
   logFile = join(dir, 'main.log');
   minLevel = level;
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  // 0700: the log is scrubbed, but it is still this user's data.
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
 export function getLogPath(): string | null {
@@ -75,7 +85,7 @@ function write(level: Level, scope: string, args: unknown[]): void {
   if (logFile) {
     try {
       rotateIfNeeded();
-      appendFileSync(logFile, line + '\n');
+      appendFileSync(logFile, line + '\n', { mode: 0o600 });
     } catch {
       /* never crash on logging */
     }

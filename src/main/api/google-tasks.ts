@@ -73,12 +73,12 @@ export const PAGE_SIZE = 100;
  * the override appends `/tasks/v1` while the production constant already
  * contains it.
  *
- * Read from process.env directly rather than src/main/env.ts: that module
- * imports `electron` at load time and this one must stay importable in a
- * plain node unit test.
+ * The override is passed in by the caller (src/main/sync/index.ts reads it from
+ * src/main/env.ts, which only honours it in unpackaged builds). This module never
+ * reads process.env itself, so a packaged app cannot be pointed at another host.
  */
 export function resolveBaseUrl(override?: string | null): string {
-  const base = override ?? process.env['BT_GOOGLE_BASE_URL'] ?? null;
+  const base = override ?? null;
   if (!base) return GOOGLE_TASKS_BASE_URL;
   const trimmed = base.endsWith('/') ? base.slice(0, -1) : base;
   return `${trimmed}/tasks/v1`;

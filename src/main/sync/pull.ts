@@ -7,12 +7,13 @@ import type { Priority, RequestQueue } from '../api/request-queue';
 import {
   bindListRemoteId,
   getAllListsIncludingDeleted,
+  getList,
   getListByRemoteId,
   getListRow,
   hardDeleteList,
   upsertListFromRemote,
 } from '../db/repositories/lists';
-import { findPending, hasPendingForEntity, updateOutbox } from '../db/repositories/outbox';
+import { findPending, findUnsent, hasPendingForEntity, listsWithPendingRemoteTasks, updateOutbox } from '../db/repositories/outbox';
 import { allTaskRowsInList, getTaskRowByRemoteId } from '../db/repositories/tasks';
 import { getSyncState, setSyncState } from '../db/repositories/sync-state';
 import type { Clock } from './clock';
@@ -37,7 +38,9 @@ export const COLD_START_FULL_MS = 24 * 3_600_000;
 export const OFFLINE_FULL_MS = 7 * 86_400_000;
 /** Adoption window for duplicate-create reconciliation. */
 export const DUPLICATE_WINDOW_MS = 10 * 60_000;
-const MAX_PAGES = 500;
+/** Hard stop on pagination; a server that never stops handing out page tokens
+ *  must not spin forever. Exported so the test suite can reach it cheaply. */
+export const MAX_PAGES = 500;
 
 export interface PullDeps {
   api: GoogleTasksApi;
@@ -146,7 +149,8 @@ function adoptLocalLists(remote: readonly GTaskList[], touched: Set<string>): vo
   if (unbound.length === 0) return;
   const taken = new Set<string>();
   for (const local of unbound) {
-    const create = findPending(local.id, 'list.create');
+    // Parked creates count too: retrying one after adoption would make a duplicate list on Google.
+    const create = findUnsent(local.id, 'list.create');
     if (!create) continue;
     const match = remote.find(
       (r) => !taken.has(r.id) && (r.title ?? '').trim().toLowerCase() === local.title.trim().toLowerCase() && getListByRemoteId(r.id) === null,
@@ -171,6 +175,7 @@ export async function pullList(deps: PullDeps, list: TaskList, now: string, opts
   let pageToken: string | undefined;
   let maxUpdated: string | null = null;
   let serverDate: string | null = null;
+  let truncated = true;
   const seenRemoteIds = new Set<string>();
 
   for (let page = 0; page < MAX_PAGES; page++) {
@@ -193,8 +198,20 @@ export async function pullList(deps: PullDeps, list: TaskList, now: string, opts
     }
     const skipRemoteIds = await reconcileDuplicates(deps, list, p.items, now);
     absorb(changes, mergeRemoteTasks(p.items, { listId: list.id, listRemoteId: list.remoteId, now, skipRemoteIds }));
-    if (!p.nextPageToken) break;
+    if (!p.nextPageToken) {
+      truncated = false;
+      break;
+    }
     pageToken = p.nextPageToken;
+  }
+
+  if (truncated) {
+    // We never reached the end of the listing. Two things must NOT happen:
+    // advancing the watermark (everything past the cap would be lost forever)
+    // and running the key-set diff (every unseen row would be hard-deleted).
+    // The merge of what we did read stands — it is idempotent.
+    deps.logger.warn(`pull for "${list.title}" stopped at ${MAX_PAGES} pages; watermark held back`);
+    return { changes, full: false };
   }
 
   if (full) {
@@ -268,6 +285,46 @@ async function reconcileDuplicates(deps: PullDeps, list: TaskList, items: readon
     }
   }
   return skip;
+}
+
+export interface PrePullResult {
+  changes: MergeChanges;
+  /** Lists we could NOT check. Pushing an already-synced task in one of these
+   *  risks overwriting a remote edit we never saw. */
+  unverified: Set<string>;
+}
+
+/**
+ * CONFLICT DETECTION, before the push.
+ *
+ * A cycle is push-then-pull so the user's own change reaches Google before we
+ * merge anything from it. That is right for ordering and blind to conflicts:
+ * the push's pre-check compares the row's `updated_at` against the entry's
+ * `base_updated_at`, and both were written by the same pull, so an edit another
+ * device made since then is invisible and the push silently overwrites it.
+ *
+ * So: incrementally pull the lists that have queued work for tasks Google
+ * already knows about. This cannot lose a local edit — the merge is per-field
+ * and dirty-aware, so a field the user touched is either kept or raised as a
+ * conflict, never overwritten.
+ *
+ * A list that fails to pull is reported rather than thrown: the rest of the
+ * outbox (creates, other lists) must still drain.
+ */
+export async function runPrePull(deps: PullDeps, now: string): Promise<PrePullResult> {
+  const result: PrePullResult = { changes: emptyChanges(), unverified: new Set() };
+  for (const listId of listsWithPendingRemoteTasks()) {
+    const list = getList(listId);
+    if (!list || list.remoteId === null) continue;
+    try {
+      const { changes } = await pullList(deps, list, now, { full: false });
+      absorb(result.changes, changes);
+    } catch (e) {
+      result.unverified.add(listId);
+      deps.logger.warn(`could not check "${list.title}" for remote edits before pushing`, e);
+    }
+  }
+  return result;
 }
 
 export async function runPull(deps: PullDeps, now: string, opts: PullOptions = {}): Promise<PullResult> {

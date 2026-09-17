@@ -198,7 +198,7 @@ describe('push: readiness and blocking', () => {
     const row = listOutboxRows(['pending', 'blocked']).find((r) => r.entity_id === t.id);
     const parked = listParked();
     expect(row).toBeUndefined();
-    expect(parked.some((r) => r.entity_id === t.id && r.last_error_code === 'dependency_failed')).toBe(true);
+    expect(parked.some((r) => r.entity_id === t.id && r.last_error_code === 'DEPENDENCY_FAILED')).toBe(true);
     expect(parked.some((r) => r.entity_id === list.id)).toBe(true);
   });
 
@@ -291,6 +291,31 @@ describe('push: failure handling', () => {
     expect(getTaskRow(t.id)!.title).toBe('Unlucky');
   });
 
+  it('reports the soonest backoff so the scheduler can wake for it', async () => {
+    const listId = boundList();
+    const t = createTask({ title: 'Flaky', listId });
+    h.google.failNext('insertTask', new NetworkError(new Error('down'), false), 1);
+
+    const at = h.clock.now();
+    const failed = await h.push();
+    const row = listOutboxRows(['pending']).find((r) => r.entity_id === t.id)!;
+    expect(failed.retryAt).toBe(parseInstant(row.next_attempt_at));
+    expect(failed.retryAt).toBe(at + 750);
+
+    // Too early: skipped, no attempt burned, the same wake reported again.
+    h.clock.set(at + 500);
+    const early = await h.push();
+    expect(early.pushed).toBe(0);
+    expect(early.retryAt).toBe(at + 750);
+    expect(listOutboxRows(['pending']).find((r) => r.entity_id === t.id)!.attempts).toBe(1);
+
+    // On time: sent, nothing left to wake for.
+    h.clock.set(at + 750);
+    const done = await h.push();
+    expect(done.pushed).toBe(1);
+    expect(done.retryAt).toBeNull();
+  });
+
   it('a 400 parks immediately — retrying eight times proves nothing', async () => {
     const listId = boundList();
     createTask({ title: 'Rejected', listId });
@@ -299,7 +324,7 @@ describe('push: failure handling', () => {
     expect(result.parked).toBe(1);
     const parked = listParked()[0]!;
     expect(parked.attempts).toBe(1);
-    expect(parked.last_error_code).toBe('http_400');
+    expect(parked.last_error_code).toBe('VALIDATION');
     expect(parked.last_error).toMatch(/Title too long/);
   });
 

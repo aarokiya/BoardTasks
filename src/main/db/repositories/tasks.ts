@@ -6,7 +6,7 @@ import { nowIso } from '../../util/time';
 import { uuid } from '../../util/uuid';
 import { AppError } from '../../ipc/errors';
 import { rowToGithub, rowToTask, type GithubRow, type TaskRow } from './mappers';
-import { cancelAllFor, enqueue, findPending, hasPendingCreate, updateOutbox, type TaskWireFields } from './outbox';
+import { cancelAllFor, enqueue, findPending, hasUnsentCreate, updateOutbox, type TaskWireFields } from './outbox';
 import { ensureDefaultList, getList } from './lists';
 
 const SELECT = `
@@ -56,11 +56,22 @@ export function getTaskRow(id: string): TaskRow | null {
 export function searchTasks(q: string, limit = 50): Task[] {
   const trimmed = q.trim();
   if (!trimmed) return [];
-  // FTS5 prefix query per term; quote terms to neutralize operators.
-  const expr = trimmed.split(/\s+/).map((t) => `"${t.replace(/"/g, '""')}"*`).join(' ');
+  // FTS5 prefix query per term; quote terms to neutralize operators ("OR",
+  // "*", a stray quote). A term left with no indexable characters is dropped —
+  // `""*` is a syntax error, and an empty MATCH matches everything.
+  const expr = trimmed
+    .split(/\s+/)
+    .map((t) => t.replace(/"/g, ''))
+    .filter((t) => t.length > 0)
+    .map((t) => `"${t}"*`)
+    .join(' ');
+  if (!expr) return [];
   try {
+    // The limit has to be applied AFTER `deleted = 0`, not inside the MATCH
+    // subquery: otherwise a page of deleted rows crowds out live matches and
+    // the search comes back empty.
     const rows = getDb()
-      .prepare(`${SELECT} WHERE t.rowid IN (SELECT rowid FROM tasks_fts WHERE tasks_fts MATCH ? ORDER BY rank LIMIT ?) AND t.deleted = 0`)
+      .prepare(`${SELECT} JOIN tasks_fts ON tasks_fts.rowid = t.rowid WHERE tasks_fts MATCH ? AND t.deleted = 0 ORDER BY rank LIMIT ?`)
       .all(expr, limit) as TaskRow[];
     return hydrate(rows);
   } catch {
@@ -251,7 +262,10 @@ export function deleteTasks(ids: string[]): { deletedIds: string[] } {
         db.prepare('UPDATE tasks SET deleted = 1, local_updated_at = ?, rev = rev + 1 WHERE id = ?').run(now, r.id);
         deletedIds.push(r.id);
       }
-      if (cur.remote_id === null && hasPendingCreate(id)) {
+      // Only skip the network when the create has NOT been sent. An INFLIGHT
+      // create will bind a remote id regardless of what the outbox says, so
+      // cancelling it would leave the task alive on Google and gone here.
+      if (cur.remote_id === null && hasUnsentCreate(id)) {
         for (const r of all) cancelAllFor(r.id);
       } else {
         for (const r of all) cancelAllFor(r.id);
@@ -321,9 +335,26 @@ export function resolveConflict(id: string, resolution: 'keepLocal' | 'useServer
       return;
     }
     if (resolution === 'useServer') {
+      // "Use the server's version" of a task the server no longer has means
+      // accepting the deletion — anything else leaves a row pointing at a dead
+      // Google id, and the next edit parks on a 404.
+      if (conflict.remoteDeleted) {
+        db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+        cancelAllFor(id);
+        return;
+      }
       const s = conflict.server;
-      db.prepare('UPDATE tasks SET title = COALESCE(?, title), notes = COALESCE(?, notes), status = COALESCE(?, status), due = ?, dirty_fields = ?, conflict_json = NULL, local_updated_at = ?, rev = rev + 1 WHERE id = ?')
-        .run(s.title ?? null, s.notes ?? null, s.status ?? null, 'due' in s ? (s.due ?? null) : cur.due, '[]', now, id);
+      const due = 'due' in s ? (s.due ?? null) : cur.due;
+      // completedAt is not carried on the conflict, so derive it from the
+      // status we are adopting; a cleared date drops the local-only time, the
+      // same rule the merge applies.
+      const status = s.status ?? cur.status;
+      const completedAt = status === 'completed' ? (cur.completed_at ?? now) : null;
+      db.prepare(
+        `UPDATE tasks SET title = COALESCE(?, title), notes = COALESCE(?, notes), status = ?, completed_at = ?, due = ?,
+           due_time = CASE WHEN ? IS NULL THEN NULL ELSE due_time END,
+           dirty_fields = '[]', conflict_json = NULL, local_updated_at = ?, rev = rev + 1 WHERE id = ?`,
+      ).run(s.title ?? null, s.notes ?? null, status, completedAt, due, due, now, id);
       cancelAllFor(id);
       return;
     }
@@ -392,6 +423,15 @@ export function allTaskRowsInList(listId: string): TaskRow[] {
 
 export function getTaskRowByRemoteId(remoteId: string): TaskRow | null {
   return (getDb().prepare('SELECT * FROM tasks WHERE remote_id = ?').get(remoteId) as TaskRow | undefined) ?? null;
+}
+
+/**
+ * True while a task carries an unresolved conflict. The push refuses to send
+ * anything for it: the whole point of raising a conflict is that the user, not
+ * the client, decides whose value wins.
+ */
+export function hasUnresolvedConflict(id: string): boolean {
+  return !!getDb().prepare('SELECT 1 FROM tasks WHERE id = ? AND conflict_json IS NOT NULL').get(id);
 }
 
 export function countConflicts(): number {

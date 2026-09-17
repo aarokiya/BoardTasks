@@ -130,14 +130,14 @@ describe('network-monitor probing', () => {
     expect(h.seen).toContain('captive_portal');
   });
 
-  it('a 200 where a 204 was promised is also a captive portal', async () => {
-    const h = harness([{ status: 200 }]);
+  it.each([200, 401, 403, 404, 405, 500])('a %i from the API origin proves the route — we test reachability, not an endpoint', async (status) => {
+    const h = harness([{ status }]);
     h.monitor.start();
-    await expect(h.monitor.probe()).resolves.toBe('captive_portal');
+    await expect(h.monitor.probe()).resolves.toBe('online');
   });
 
   it('a redirect within the same host is not a portal', async () => {
-    const h = harness([{ status: 302, location: 'https://clients3.google.com/elsewhere' }]);
+    const h = harness([{ status: 302, location: 'https://tasks.googleapis.com/elsewhere' }]);
     h.monitor.start();
     await expect(h.monitor.probe()).resolves.toBe('online');
   });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useMemo, useRef, useState, type ReactElement } from 'react';
 import type { Priority, Task } from '@shared/models';
 import { TIME_RE } from '@shared/date/civil';
 import { formatAgo, formatDueWithTime } from '@shared/date/format';
@@ -10,7 +10,7 @@ import { runCommand } from '../../commands/registry';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { Segmented } from '../../components/Segmented';
-import { Textarea } from '../../components/Textarea';
+import { Textarea, useAutoGrow } from '../../components/Textarea';
 import { EmptyState } from '../../components/EmptyState';
 import { Dialog } from '../../components/Dialog';
 import { cx } from '../../components/cx';
@@ -95,12 +95,9 @@ function TaskInspector({ task }: { task: Task }): ReactElement {
   const onNotesPaste = useGithubPaste({ taskId: task.id, field: 'notes', value: notesValue, onChange: setNotesDraft });
   const timeText = timeDraft ?? task.dueTime ?? '';
 
-  useEffect(() => {
-    const el = titleRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [titleValue]);
+  // Grows with the text and re-measures when the pane is resized, so a long
+  // title wraps instead of being silently cut off at 300px.
+  useAutoGrow(titleRef, titleValue);
 
   const list = lists[task.listId] ?? null;
   const completed = task.status === 'completed';

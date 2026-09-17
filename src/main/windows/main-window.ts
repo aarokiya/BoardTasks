@@ -1,7 +1,8 @@
-import { BrowserWindow, app, nativeTheme, shell } from 'electron';
+import { BrowserWindow, app, nativeTheme } from 'electron';
 import { APP_ORIGIN } from '@shared/constants';
 import type { ThemePreference } from '@shared/models';
 import { isE2E } from '../env';
+import { openExternalChecked } from '../security/harden';
 import { preloadPath } from '../paths';
 import { loadWindowState, trackWindowState } from './window-state';
 
@@ -83,8 +84,11 @@ export function createMainWindow(opts: { statePath: string; themePreference: The
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
     console.error('renderer failed to load', code, desc, url);
   });
+  // Always through the allowlist: a bare shell.openExternal() here would
+  // override the hardened global handler and hand the renderer an arbitrary
+  // `window.open()` → system URL handler primitive (file://, x-apple.*, …).
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    openExternalChecked(url);
     return { action: 'deny' };
   });
 

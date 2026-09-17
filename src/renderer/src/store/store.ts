@@ -136,13 +136,21 @@ export const useStore = create<Store>()(
   subscribeWithSelector((set, get) => {
     const ui = loadUi();
 
-    const installTasks = (tasks: Task[], deleted: string[] = []): void =>
+    /**
+     * Install authoritative entities. Anything older than what we already hold
+     * is dropped, so an out-of-order push can never undo a newer state.
+     *
+     * `authoritative` overrides that for a re-read of the row after a mutation
+     * FAILED: main never wrote, so its revision is behind the optimistic one we
+     * applied, and it is nonetheless the truth we must fall back to.
+     */
+    const installTasks = (tasks: Task[], deleted: string[] = [], authoritative = false): void =>
       set((s) => {
         const next = { ...s.tasks };
         let changed = false;
         for (const t of tasks) {
           const cur = next[t.id];
-          if (cur && t.rev < cur.rev) continue;
+          if (cur && !authoritative && t.rev < cur.rev) continue;
           if (t.deleted) {
             if (cur) { delete next[t.id]; changed = true; }
             continue;
@@ -169,11 +177,20 @@ export const useStore = create<Store>()(
         return { lists: next, version: s.version + 1 };
       });
 
+    /**
+     * Apply a mutation locally before main has confirmed it.
+     *
+     * `rev` advances with the patch. Main bumps `rev` by one per write, so the
+     * optimistic revision matches the one the response will carry — while a
+     * `data:changed` describing the row as it was BEFORE the edit now compares
+     * as older and is dropped by `installTasks` instead of reverting the patch
+     * under the user's cursor.
+     */
     const patchLocal = (id: string, patch: Partial<Task>): void =>
       set((s) => {
         const cur = s.tasks[id];
         if (!cur) return {};
-        return { tasks: { ...s.tasks, [id]: { ...cur, ...patch } }, version: s.version + 1 };
+        return { tasks: { ...s.tasks, [id]: { ...cur, ...patch, rev: cur.rev + 1 } }, version: s.version + 1 };
       });
 
     return {
@@ -323,7 +340,7 @@ export const useStore = create<Store>()(
           return task;
         } catch (e) {
           const fresh = await call('tasks:get', { id }).catch(() => null);
-          if (fresh) installTasks([fresh]);
+          if (fresh) installTasks([fresh], [], true);
           throw e;
         }
       },
@@ -336,7 +353,7 @@ export const useStore = create<Store>()(
           return tasks;
         } catch (e) {
           const fresh = await Promise.all(ids.map((id) => call('tasks:get', { id }).catch(() => null)));
-          installTasks(fresh.filter((t): t is Task => t !== null));
+          installTasks(fresh.filter((t): t is Task => t !== null), [], true);
           throw e;
         }
       },

@@ -60,12 +60,26 @@ export function googleDueFromCivil(d: CivilDate): string {
   return `${d}T00:00:00.000Z`;
 }
 
+// Constructing an Intl.DateTimeFormat costs far more than formatting with one,
+// and the Completed view calls this once per row. Cached per zone; the system
+// zone is keyed as '' so a mid-session TZ change still resolves through ICU.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function dayFormatter(timeZone?: string): Intl.DateTimeFormat {
+  const key = timeZone ?? '';
+  let f = formatters.get(key);
+  if (!f) {
+    const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+    if (timeZone) opts.timeZone = timeZone;
+    f = new Intl.DateTimeFormat('en-CA', opts);
+    formatters.set(key, f);
+  }
+  return f;
+}
+
 /** Today's civil date in the given IANA zone (default: system zone). */
 export function todayCivil(now: Date = new Date(), timeZone?: string): CivilDate {
   // en-CA formats as YYYY-MM-DD; the only dependency-free correct approach.
-  const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
-  if (timeZone) opts.timeZone = timeZone;
-  const s = new Intl.DateTimeFormat('en-CA', opts).format(now);
+  const s = dayFormatter(timeZone).format(now);
   // Some ICU builds emit U+2010 or different separators; normalize defensively.
   return asCivil(s.replace(/[^\d]/g, '-').slice(0, 10));
 }

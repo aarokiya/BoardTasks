@@ -468,8 +468,8 @@ export function Onboarding(): ReactElement {
               </Button>
             )}
           </div>
-          <Button variant="primary" disabled={!canContinue} onClick={onContinue}>
-            {step === 6 ? 'Start using BoardTasks' : step === 4 ? 'Continue' : 'Continue'}
+          <Button variant="primary" data-bt-autofocus="" disabled={!canContinue} onClick={onContinue}>
+            {step === 6 ? 'Start using BoardTasks' : 'Continue'}
           </Button>
         </>
       }

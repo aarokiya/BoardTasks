@@ -212,11 +212,14 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
-  it('shows an empty state when nothing matches', async () => {
+  it('shows a curated empty state that names the search modes', async () => {
     await setup();
     render(<CommandPalette />);
     fireEvent.change(input(), { target: { value: 'zzzzqqq' } });
-    expect(screen.getByText('No matches')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing matches/)).toBeInTheDocument();
+    const modes = within(screen.getByRole('list'));
+    expect(modes.getByText('actions')).toBeInTheDocument();
+    expect(modes.getByText('GitHub')).toBeInTheDocument();
   });
 
   it('shows a keyboard hint next to a command', async () => {

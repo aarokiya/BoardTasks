@@ -91,12 +91,27 @@ export function cancelAllFor(entityId: string): number {
   return getDb().prepare(`UPDATE outbox SET status = 'done', updated_at = ? WHERE entity_id = ? AND status != 'done'`).run(nowIso(), entityId).changes;
 }
 
+/** Like findPending but also matches parked entries — anything not yet on the wire. */
+export function findUnsent(entityId: string, op: OutboxOp): OutboxRow | undefined {
+  return getDb().prepare(`SELECT * FROM outbox WHERE entity_id = ? AND op = ? AND status IN ('pending','blocked','parked') ORDER BY seq DESC LIMIT 1`).get(entityId, op) as OutboxRow | undefined;
+}
+
 export function findPending(entityId: string, op: OutboxOp): OutboxRow | undefined {
   return getDb().prepare(`SELECT * FROM outbox WHERE entity_id = ? AND op = ? AND status IN ('pending','blocked') ORDER BY seq DESC LIMIT 1`).get(entityId, op) as OutboxRow | undefined;
 }
 
-export function hasPendingCreate(entityId: string): boolean {
-  return !!getDb().prepare(`SELECT 1 FROM outbox WHERE entity_id = ? AND op IN ('task.create','list.create') AND status != 'done' LIMIT 1`).get(entityId);
+/**
+ * A create that is queued but has NOT been handed to the network yet, so
+ * cancelling it really does mean the entity never reaches Google.
+ *
+ * An `inflight` create is a request already on the wire: it will bind a remote
+ * id whatever the outbox row says. A delete that treats that as "nothing to
+ * send" leaves the entity alive on Google and gone from this machine forever.
+ */
+export function hasUnsentCreate(entityId: string): boolean {
+  return !!getDb()
+    .prepare(`SELECT 1 FROM outbox WHERE entity_id = ? AND op IN ('task.create','list.create') AND status IN ('pending','blocked','parked') LIMIT 1`)
+    .get(entityId);
 }
 
 export function listOutbox(): OutboxEntry[] {
@@ -148,6 +163,26 @@ export function listOutboxRows(statuses?: readonly OutboxRow['status'][]): Outbo
 /** True when anything is still queued for an entity (pull must not delete it). */
 export function hasPendingForEntity(entityId: string): boolean {
   return !!getDb().prepare(`SELECT 1 FROM outbox WHERE entity_id = ? AND status != 'done' LIMIT 1`).get(entityId);
+}
+
+/**
+ * Local list ids holding a task that has queued work AND already exists on
+ * Google — i.e. exactly the lists where a push could overwrite a remote edit.
+ *
+ * The cycle pulls these before pushing: the push-side pre-check compares the
+ * row's `updated_at` with the entry's `base_updated_at`, and both were written
+ * by the same pull, so a remote change made since then is invisible to it.
+ */
+export function listsWithPendingRemoteTasks(): string[] {
+  return (
+    getDb()
+      .prepare(
+        `SELECT DISTINCT t.list_id AS id
+           FROM outbox o JOIN tasks t ON t.id = o.entity_id
+          WHERE o.entity = 'task' AND o.status IN ('pending','inflight','blocked') AND t.remote_id IS NOT NULL`,
+      )
+      .all() as { id: string }[]
+  ).map((r) => r.id);
 }
 
 /** Rows left 'inflight' by a crash: nothing is actually in flight after a restart. */

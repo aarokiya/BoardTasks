@@ -52,3 +52,15 @@
 }
 .confirmBody { display: flex; flex-direction: column; gap: var(--bt-space-5); }
 .skeletonStack { display: flex; flex-direction: column; gap: var(--bt-space-6); }
+
+.select {
+  min-width: 180px;
+  height: 28px;
+  padding: 0 var(--bt-space-4);
+  border-radius: var(--bt-radius-sm);
+  border: 1px solid var(--bt-border);
+  background: var(--bt-surface-2);
+  color: var(--bt-text-primary);
+  font: inherit;
+}
+.select:focus-visible { outline: none; box-shadow: var(--bt-focus-ring); }

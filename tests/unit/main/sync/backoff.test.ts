@@ -59,12 +59,13 @@ describe('classifyError', () => {
   it('auth errors abort the drain and never park the entry', () => {
     const c = classifyError(new AuthError('invalid_grant'));
     expect(c.disposition).toBe('auth');
-    expect(c.code).toBe('auth_invalid_grant');
+    expect(c.code).toBe('AUTH');
     expect(c.message).toMatch(/unsynced changes are kept/i);
   });
 
-  it('insufficient_scope explains what the user has to do', () => {
+  it('insufficient_scope explains what the user has to do, and is a permission problem not a dead sign-in', () => {
     expect(classifyError(new AuthError('insufficient_scope')).message).toMatch(/grant the Tasks permission/i);
+    expect(classifyError(new AuthError('insufficient_scope')).code).toBe('FORBIDDEN');
   });
 
   it('a burst rate limit is transient with an exact wait', () => {
@@ -77,7 +78,7 @@ describe('classifyError', () => {
   it('a daily quota is flagged separately so the engine can stop asking', () => {
     const c = classifyError(new RateLimitError(600_000, true, 'dailyLimitExceeded'));
     expect(c.daily).toBe(true);
-    expect(c.code).toBe('daily_limit');
+    expect(c.code).toBe('RATE_LIMITED');
   });
 
   it('412 is a conflict, not a failure', () => {
@@ -85,8 +86,10 @@ describe('classifyError', () => {
   });
 
   it('network failures are transient and distinguish a timeout', () => {
-    expect(classifyError(new NetworkError(new Error('x'), false)).code).toBe('network');
-    expect(classifyError(new NetworkError(new Error('x'), true)).code).toBe('timeout');
+    // One code for the sheet to map; the timeout lives in the human sentence.
+    expect(classifyError(new NetworkError(new Error('x'), false)).code).toBe('NETWORK');
+    expect(classifyError(new NetworkError(new Error('x'), true)).code).toBe('NETWORK');
+    expect(classifyError(new NetworkError(new Error('x'), true)).message).toMatch(/timed out/i);
     expect(classifyError(new NetworkError(new Error('x'), true)).disposition).toBe('transient');
   });
 

@@ -1,10 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react';
+import { createPortal } from 'react-dom';
 import type { Task } from '@shared/models';
 import type { ViewId } from '@shared/constants';
 import { announce } from '../../lib/announce';
 import { call } from '../../lib/ipc';
 import { runCommand } from '../../commands/registry';
 import { useStore } from '../../store/store';
+import { useInertBackground } from '../../hooks/useFocusTrap';
 import { Kbd } from '../shortcuts/Kbd';
 import { highlight } from './fuzzy';
 import { buildSections, flatten, parseMode, taskScopedCommands, type PaletteItem, type PaletteSection } from './sources';
@@ -56,6 +58,11 @@ function PaletteDialog(): ReactElement {
   // Hover must not steal the active row while the user is typing. Only a real
   // pointer movement re-arms it.
   const hoverArmed = useRef(false);
+
+  // aria-modal alone does not hide the app from assistive tech. This only
+  // works because the palette is portalled to <body>: useInertBackground marks
+  // every child of #root inert, which would otherwise include the palette.
+  useInertBackground(true);
 
   useEffect(() => {
     const restore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -206,7 +213,7 @@ function PaletteDialog(): ReactElement {
   const { prefix } = parseMode(raw);
   const activeItem = items[activeIdx];
 
-  return (
+  return createPortal(
     <div className={s.scrim} onMouseDown={close} data-testid="command-palette">
       <div
         className={s.panel}
@@ -250,7 +257,26 @@ function PaletteDialog(): ReactElement {
         </div>
 
         {items.length === 0 ? (
-          <div className={s.empty}>No matches</div>
+          <div className={s.empty}>
+            <p className={s.emptyTitle}>
+              {raw.trim() ? <>Nothing matches &ldquo;{raw.trim()}&rdquo;</> : 'Nothing to show yet'}
+            </p>
+            <p className={s.emptyBody}>Narrow the search to one kind of thing:</p>
+            <ul className={s.emptyModes}>
+              <li>
+                <kbd className={s.hintKey}>&gt;</kbd> actions
+              </li>
+              <li>
+                <kbd className={s.hintKey}>@</kbd> tasks
+              </li>
+              <li>
+                <kbd className={s.hintKey}>#</kbd> lists
+              </li>
+              <li>
+                <kbd className={s.hintKey}>gh</kbd> GitHub
+              </li>
+            </ul>
+          </div>
         ) : (
           <ul className={s.list} id={LIST_ID} role="listbox" aria-label="Results" ref={listRef}>
             {sections.map((section) => {
@@ -310,6 +336,7 @@ function PaletteDialog(): ReactElement {
           </span>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

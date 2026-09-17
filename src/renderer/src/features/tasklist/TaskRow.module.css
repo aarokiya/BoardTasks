@@ -1,7 +1,9 @@
 .row {
   display: flex; align-items: center; gap: var(--bt-space-4);
   height: var(--bt-row-h, var(--bt-row-h-default));
-  padding: 0 var(--bt-space-4) 0 var(--bt-space-3);
+  /* The left inset reserves the disclosure gutter on EVERY row, so a parent's
+     chevron never lands on top of its own checkbox and rows stay aligned. */
+  padding: 0 var(--bt-space-4) 0 var(--bt-space-7);
   border-radius: var(--bt-radius-sm);
   position: relative; cursor: default; width: 100%;
   color: var(--bt-text-primary); font-size: var(--bt-text-13);
@@ -13,14 +15,14 @@
 .rowCompleted .title { color: var(--bt-text-quaternary); text-decoration: line-through; }
 .rowDragging { opacity: 0.4; }
 
-.depth1 { padding-left: calc(var(--bt-row-indent, 24px) + var(--bt-space-3)); }
+.depth1 { padding-left: calc(var(--bt-row-indent, 24px) + var(--bt-space-7)); }
 .guide {
-  position: absolute; left: calc(var(--bt-space-3) + 9px); top: 0; bottom: 0;
+  position: absolute; left: calc(var(--bt-space-7) + 8px); top: 0; bottom: 0;
   width: 1px; background: var(--bt-border);
 }
 
 .disclosure {
-  position: absolute; left: -2px; top: 50%; transform: translateY(-50%);
+  position: absolute; left: var(--bt-space-1); top: 50%; transform: translateY(-50%);
   width: 16px; height: 16px; display: grid; place-items: center;
   color: var(--bt-text-quaternary); border-radius: var(--bt-radius-xs);
   opacity: 0; transition: opacity var(--bt-dur-fast) var(--bt-ease-out);

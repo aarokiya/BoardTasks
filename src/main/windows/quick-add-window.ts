@@ -1,5 +1,6 @@
-import { BrowserWindow, app, nativeTheme, screen, shell } from 'electron';
+import { BrowserWindow, app, nativeTheme, screen } from 'electron';
 import { isE2E } from '../env';
+import { openExternalChecked } from '../security/harden';
 import { preloadPath } from '../paths';
 import { getSettings } from '../db/repositories/settings';
 import { emit } from '../ipc/emitter';
@@ -90,8 +91,9 @@ function create(): BrowserWindow {
   next.on('closed', () => {
     win = null;
   });
+  // Same rule as the main window: never bypass the external-URL allowlist.
   next.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    openExternalChecked(url);
     return { action: 'deny' };
   });
   next.webContents.on('did-fail-load', (_e, code, desc, url) => {

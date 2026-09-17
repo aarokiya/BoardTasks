@@ -5,7 +5,7 @@ import { nowIso } from '../../util/time';
 import { uuid } from '../../util/uuid';
 import { AppError } from '../../ipc/errors';
 import { rowToList, type ListRow } from './mappers';
-import { cancelAllFor, enqueue, hasPendingCreate } from './outbox';
+import { cancelAllFor, enqueue, hasUnsentCreate } from './outbox';
 
 const SELECT = `
   SELECT l.*,
@@ -98,7 +98,9 @@ export function deleteList(id: string): { deletedTaskIds: string[] } {
     db.prepare('UPDATE tasks SET deleted = 1, local_updated_at = ?, rev = rev + 1 WHERE list_id = ?').run(now, id);
     db.prepare('UPDATE task_lists SET deleted = 1, is_default = 0, local_updated_at = ?, rev = rev + 1 WHERE id = ?').run(now, id);
     for (const t of taskIds) cancelAllFor(t);
-    if (cur.remoteId === null && hasPendingCreate(id)) {
+    // An INFLIGHT `list.create` still lands on Google; only an unsent one can
+    // be cancelled without leaving a list behind there.
+    if (cur.remoteId === null && hasUnsentCreate(id)) {
       cancelAllFor(id);
     } else {
       cancelAllFor(id);

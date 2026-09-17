@@ -7,6 +7,7 @@ import { SettingsPanel } from '../features/settings/SettingsPanel';
 import { OutboxSheet } from '../features/outbox/OutboxSheet';
 import { Onboarding } from '../features/onboarding/Onboarding';
 import { DatePickerOverlay, ListPickerOverlay } from '../features/detail';
+import { TimePickerOverlay } from '../features/quickadd/TimePicker';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export interface OverlaysProps {
@@ -39,8 +40,9 @@ export function Overlays({ forceOnboarding }: OverlaysProps): ReactElement | nul
     case 'list-picker':
       return <ErrorBoundary level="pane" name="List picker"><ListPickerOverlay /></ErrorBoundary>;
     case 'date-picker':
-    case 'time-picker':
       return <ErrorBoundary level="pane" name="Date picker"><DatePickerOverlay /></ErrorBoundary>;
+    case 'time-picker':
+      return <ErrorBoundary level="pane" name="Reminder time"><TimePickerOverlay /></ErrorBoundary>;
     default:
       return null;
   }

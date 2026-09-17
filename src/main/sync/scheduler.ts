@@ -21,6 +21,23 @@ export interface SchedulerIntervals {
   localEditMaxWaitMs: number;
 }
 
+/**
+ * Poll cadence derived from the user's `syncIntervalSec` setting.
+ *
+ * Only the focused rhythm follows the setting literally. A background or
+ * battery cadence that honoured "every 15 seconds" would drain a laptop for no
+ * benefit, so those are multiples with a floor: at least 5 minutes in the
+ * background, at least 15 on battery.
+ */
+export function intervalsFromSetting(syncIntervalSec: number): Pick<SchedulerIntervals, 'focusedMs' | 'backgroundMs' | 'batteryMs'> {
+  const sec = Math.max(15, Math.min(3600, Math.round(syncIntervalSec)));
+  return {
+    focusedMs: sec * 1000,
+    backgroundMs: Math.max(5 * sec, 300) * 1000,
+    batteryMs: Math.max(15 * sec, 900) * 1000,
+  };
+}
+
 export const DEFAULT_INTERVALS: SchedulerIntervals = {
   focusedMs: 60_000,
   backgroundMs: 300_000,
@@ -29,19 +46,41 @@ export const DEFAULT_INTERVALS: SchedulerIntervals = {
   localEditMaxWaitMs: 5_000,
 };
 
-export type SyncTrigger = 'startup' | 'interval' | 'focus' | 'network' | 'resume' | 'local-edit' | 'manual' | 'post-auth';
+/**
+ * A backoff wake never fires sooner than this after a cycle. A push only ever
+ * reports a `retryAt` ahead of the moment it ran, but a slow cycle can outlast
+ * a short backoff, and "immediately" must still not mean a busy loop.
+ */
+export const MIN_RETRY_WAKE_MS = 250;
+
+export type SyncTrigger = 'startup' | 'interval' | 'focus' | 'network' | 'resume' | 'local-edit' | 'manual' | 'post-auth' | 'retry';
+
+/** What a cycle learned that changes when the next one should run. */
+export interface CycleOutcome {
+  /**
+   * Epoch ms at which an outbox entry's backoff elapses. The scheduler wakes
+   * for it (while online) instead of leaving the entry to the next poll.
+   */
+  retryAt: number | null;
+}
 
 export interface SchedulerDeps {
   clock: Clock;
   logger: Logger;
   /** Runs one full cycle (push then pull). Must never reject. */
-  runCycle(opts: { full: boolean; trigger: SyncTrigger }): Promise<void>;
+  runCycle(opts: { full: boolean; trigger: SyncTrigger }): Promise<CycleOutcome | void>;
   isOnline(): boolean;
   authState(): AuthState;
   /** `powerMonitor.isOnBatteryPower()`, injected. */
   isOnBattery(): boolean;
   isFocused(): boolean;
   intervals?: Partial<SchedulerIntervals>;
+  /**
+   * A floor for the next poll, in ms. The engine uses it to park the cycle
+   * until a `Retry-After` expires instead of hammering a throttled account on
+   * the ordinary rhythm. Manual syncs bypass it — the user asked.
+   */
+  nextPollFloorMs?: () => number;
 }
 
 export interface Scheduler {
@@ -52,6 +91,8 @@ export interface Scheduler {
   /** User asked for a sync. Resolves when the resulting cycle finishes. */
   manual(full: boolean): Promise<void>;
   setFocused(focused: boolean): void;
+  /** Change the cadence live (the sync-interval setting). Re-arms a pending poll. */
+  setIntervals(next: Partial<SchedulerIntervals>): void;
   networkChanged(online: boolean): void;
   powerResume(suspendedMs: number): void;
   authChanged(state: AuthState): void;
@@ -61,7 +102,7 @@ export interface Scheduler {
 }
 
 export function createScheduler(deps: SchedulerDeps): Scheduler {
-  const intervals: SchedulerIntervals = { ...DEFAULT_INTERVALS, ...deps.intervals };
+  let intervals: SchedulerIntervals = { ...DEFAULT_INTERVALS, ...deps.intervals };
   const { clock, logger } = deps;
 
   let started = false;
@@ -71,6 +112,8 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   let pollAt: number | null = null;
   let debounceTimer: TimerHandle | null = null;
   let debounceDeadline: number | null = null;
+  /** Soonest outbox backoff expiry reported by the last cycle, epoch ms. */
+  let retryAt: number | null = null;
   const waiters: Array<() => void> = [];
 
   function pollIntervalMs(): number {
@@ -91,12 +134,25 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   function schedulePoll(): void {
     clearPoll();
     if (!started || paused()) return;
-    const ms = pollIntervalMs();
+    // Never poll sooner than the server told us to wait.
+    const floor = deps.nextPollFloorMs?.() ?? 0;
+    let ms = Math.max(pollIntervalMs(), floor);
+    let reason: SyncTrigger = 'interval';
+    // An entry in backoff earns an earlier wake — but only while online. Offline,
+    // every wake would fail, burn an attempt, and park the entry within minutes;
+    // the network transition itself re-triggers a cycle when the route is back.
+    if (retryAt !== null && deps.isOnline()) {
+      const wait = Math.max(retryAt - clock.now(), floor, MIN_RETRY_WAKE_MS);
+      if (wait < ms) {
+        ms = wait;
+        reason = 'retry';
+      }
+    }
     pollAt = clock.now() + ms;
     pollTimer = clock.setTimeout(() => {
       pollTimer = null;
       pollAt = null;
-      trigger('interval', false);
+      trigger(reason, false);
     }, ms);
   }
 
@@ -122,8 +178,12 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   async function cycle(reason: SyncTrigger, full: boolean): Promise<void> {
     running = true;
     clearPoll();
+    // Whatever the previous cycle learned is stale once a new one runs: it
+    // will re-examine every entry and report afresh.
+    retryAt = null;
     try {
-      await deps.runCycle({ full, trigger: reason });
+      const outcome = await deps.runCycle({ full, trigger: reason });
+      if (outcome) retryAt = outcome.retryAt;
     } catch (e) {
       // runCycle owns its error reporting; this is belt and braces so the
       // scheduler can never wedge in `running = true`.
@@ -132,9 +192,15 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       running = false;
       const again = resyncRequested;
       resyncRequested = null;
-      for (const w of waiters.splice(0)) w();
-      if (again) void cycle(again.trigger, again.full);
-      else schedulePoll();
+      if (again) {
+        // A trigger arrived mid-cycle, so this cycle did not include whatever
+        // provoked it. Leave `manual`'s callers waiting for the follow-up:
+        // resolving them here would report a result that predates the click.
+        void cycle(again.trigger, again.full);
+      } else {
+        for (const w of waiters.splice(0)) w();
+        schedulePoll();
+      }
     }
   }
 
@@ -182,6 +248,14 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     setFocused(focused) {
       if (focused) trigger('focus', false);
       schedulePoll(); // the cadence itself changes with focus
+    },
+
+    setIntervals(next) {
+      intervals = { ...intervals, ...next };
+      logger.debug(`sync cadence: ${intervals.focusedMs}ms focused / ${intervals.backgroundMs}ms background / ${intervals.batteryMs}ms on battery`);
+      // A poll already armed for the old cadence would otherwise hold the old
+      // rhythm until it fired, which makes the setting look inert.
+      if (pollTimer !== null) schedulePoll();
     },
 
     networkChanged(online) {

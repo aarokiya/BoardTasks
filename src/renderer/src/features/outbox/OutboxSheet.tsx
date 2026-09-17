@@ -12,16 +12,37 @@ import { announce } from '../../lib/announce';
 import s from './OutboxSheet.module.css';
 
 const ERROR_COPY: Record<string, string> = {
-  RATE_LIMITED: 'Google is rate-limiting this account — it will retry automatically',
-  UNAUTHENTICATED: 'Sign in again to finish this change',
-  NETWORK: 'No connection',
-  VALIDATION: 'Google rejected this change',
-  NOT_FOUND: 'The task no longer exists on Google',
+  RATE_LIMITED: 'Google is limiting how fast this account can change tasks. BoardTasks will try again on its own.',
+  AUTH: 'Sign in to Google again to finish this change.',
+  UNAUTHENTICATED: 'Sign in to Google again to finish this change.',
+  FORBIDDEN: 'Google refused this change for this account. Check the app\u2019s access in your Google account settings.',
+  NETWORK: 'No connection to Google. This will send as soon as you are back online.',
+  VALIDATION: 'Google would not accept this change.',
+  NOT_FOUND: 'This task no longer exists in Google Tasks.',
+  CONFLICT: 'This task was changed somewhere else. Resolve the conflict on the task to send your version.',
+  DEPENDENCY_FAILED: 'This change depends on another change that has not reached Google yet.',
+  INTERNAL: 'Something went wrong on the way to Google. Try again.',
 };
 
+/** The sentence a person reads. Never a code, never a raw payload. */
 function humanError(entry: OutboxEntry): string | null {
   if (entry.lastErrorCode && ERROR_COPY[entry.lastErrorCode]) return ERROR_COPY[entry.lastErrorCode]!;
+  if (entry.lastError) return entry.lastError;
+  return null;
+}
+
+/** What Google actually said — shown quietly underneath, for a bug report. */
+function rawDetail(entry: OutboxEntry): string | null {
+  if (!entry.lastError) return null;
+  if (!entry.lastErrorCode || !ERROR_COPY[entry.lastErrorCode]) return null;
   return entry.lastError;
+}
+
+/** "Tried once" / "Tried 4 times" — never "Attempt 1 · task.create". */
+function attemptCopy(attempts: number): string | null {
+  if (attempts <= 1) return null;
+  if (attempts === 2) return 'Tried twice';
+  return `Tried ${attempts} times`;
 }
 
 const STATUS_LABEL: Record<OutboxEntry['status'], string> = {
@@ -114,7 +135,6 @@ export function OutboxSheet(): ReactElement {
       title="Unsynced changes"
       description="Changes waiting to reach Google, with any errors that stopped them."
       size="wide"
-      tall
       flushBody
       footer={
         <>
@@ -168,17 +188,17 @@ export function OutboxSheet(): ReactElement {
         <div className={s.list}>
           {entries.map((entry) => {
             const message = humanError(entry);
+            const detail = rawDetail(entry);
+            const tried = attemptCopy(entry.attempts);
             return (
               <div key={entry.id} className={s.row}>
                 <div className={s.main}>
                   <span className={s.description}>{entry.description}</span>
                   {message ? <span className={s.error}>{message}</span> : null}
+                  {detail ? <span className={s.detail}>Google said: {detail}</span> : null}
                   <div className={s.metaRow}>
                     <Chip tone={STATUS_TONE[entry.status]}>{STATUS_LABEL[entry.status]}</Chip>
-                    <span className={s.meta}>
-                      Attempt {entry.attempts}
-                      {entry.op ? ` · ${entry.op}` : ''}
-                    </span>
+                    {tried ? <span className={s.meta}>{tried}</span> : null}
                   </div>
                 </div>
                 <div className={s.actions}>

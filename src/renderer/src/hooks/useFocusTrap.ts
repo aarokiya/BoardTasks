@@ -10,8 +10,13 @@ export function focusableIn(root: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Traps Tab inside `ref`, focuses the first focusable (or the container) on
- * mount, and restores focus to the previously active element on unmount.
+ * Traps Tab inside `ref`, moves focus into it on mount, and restores focus to
+ * the previously active element on unmount.
+ *
+ * Initial focus goes to `[data-bt-autofocus]` when the dialog names one,
+ * otherwise to the dialog itself — never to whatever happens to be first in
+ * the DOM, which is usually the header's close button and leaves a focus ring
+ * sitting on "✕" the moment a sheet opens.
  */
 export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true): void {
   useEffect(() => {
@@ -19,8 +24,8 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true):
     const root = ref.current;
     if (!root) return;
     const previous = document.activeElement as HTMLElement | null;
-    const first = focusableIn(root)[0];
-    (first ?? root).focus();
+    const preferred = root.querySelector<HTMLElement>('[data-bt-autofocus]');
+    (preferred ?? root).focus();
 
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Tab') return;
