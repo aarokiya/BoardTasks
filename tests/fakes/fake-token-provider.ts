@@ -5,10 +5,10 @@ export interface FakeTokenProvider extends TokenProvider {
   /** How many times a token was handed out / refreshed. */
   readonly calls: { get: number; refresh: number; invalidGrant: number };
   token: string;
-  /** Make the next N getAccessToken calls throw. */
-  failNextGet(error: unknown, times?: number): void;
-  /** Make the next N forceRefresh calls throw. */
-  failNextRefresh(error: unknown, times?: number): void;
+  /** Make the next N getAccessToken calls reject. */
+  failNextGet(error: Error, times?: number): void;
+  /** Make the next N forceRefresh calls reject. */
+  failNextRefresh(error: Error, times?: number): void;
   setState(state: AuthStatus['state'], reason?: AuthStatus['reason']): void;
 }
 
@@ -16,8 +16,8 @@ export function createFakeTokenProvider(initial = 'ya29.test-token'): FakeTokenP
   const calls = { get: 0, refresh: 0, invalidGrant: 0 };
   const listeners = new Set<(s: AuthStatus) => void>();
   let status: AuthStatus = { state: 'signed_in', clientIdHint: 'fake', account: null, reason: null, signedInAt: '2026-09-17T00:00:00.000Z' };
-  const getFailures: unknown[] = [];
-  const refreshFailures: unknown[] = [];
+  const getFailures: Error[] = [];
+  const refreshFailures: Error[] = [];
 
   const provider: FakeTokenProvider = {
     calls,

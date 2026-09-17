@@ -84,7 +84,7 @@ export function AppShell(): ReactElement {
   );
 
   return (
-    <div ref={ref} className={s.shell} data-mode={mode} data-density={density}>
+    <div ref={ref} className={s.shell} data-bt-shell data-mode={mode} data-density={density}>
       <div className={s.dragRegion} aria-hidden="true" />
       <Titlebar sidebarVisible={sidebarKind !== 'hidden' || overlaySidebar} onToggleSidebar={toggleSidebar} />
 

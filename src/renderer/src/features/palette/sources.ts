@@ -75,8 +75,15 @@ function taskSubtitle(t: Task, state: State, listName: string | undefined): stri
   return bits.join(' · ');
 }
 
+/** Empty-query ordering before any usage data exists: the things people reach for first. */
+const DEFAULT_ORDER: readonly string[] = [
+  'create.task', 'nav.today', 'nav.upcoming', 'sync.now', 'task.due.pick', 'create.list', 'view.shortcuts',
+  'sync.outbox', 'github.link', 'app.settings', 'view.theme.system', 'sync.full',
+];
+
 function rankCommands(query: string, includeDisabled: boolean): PaletteItem[] {
   const usage = commandUsage();
+  const empty = query.trim() === '';
   const out: PaletteItem[] = [];
   for (const c of listCommands()) {
     if (!c.enabled && !includeDisabled) continue;
@@ -102,7 +109,11 @@ function rankCommands(query: string, includeDisabled: boolean): PaletteItem[] {
       enabled: c.enabled,
       reason: c.enabled ? undefined : 'Not available right now',
       positions: best.positions,
-      score: best.score + Math.min(usage[c.id] ?? 0, 10) * 2 + (c.enabled ? 0 : -40),
+      score:
+        best.score +
+        Math.min(usage[c.id] ?? 0, 10) * 2 +
+        (c.enabled ? 0 : -40) +
+        (empty && DEFAULT_ORDER.includes(c.id) ? (DEFAULT_ORDER.length - DEFAULT_ORDER.indexOf(c.id)) * 3 : 0),
     });
   }
   out.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));

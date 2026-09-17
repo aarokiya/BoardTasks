@@ -39,7 +39,8 @@ export interface SyncEngineDeps {
   random: Random;
   network: NetworkMonitor;
   logger: Logger;
-  emit(event: MainEvent): void;
+  /** Declared as a property, not a method: it is destructured and called bare. */
+  emit: (event: MainEvent) => void;
   queue?: RequestQueue;
   isFocused?: () => boolean;
   isOnBattery?: () => boolean;
@@ -75,7 +76,7 @@ export function initialSyncState(online: boolean): SyncState {
 
 export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
   const { clock, logger, network, tokens, emit } = deps;
-  const queue = deps.queue ?? createRequestQueue({ clock, logger });
+  const queue = deps.queue ?? createRequestQueue({ clock, logger: deps.logger });
   const listeners = new Set<(s: SyncState) => void>();
 
   let state = initialSyncState(network.isOnline());
@@ -89,6 +90,9 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     try {
       return tokens.getStatus().state;
     } catch {
+      // The auth service may not be initialised yet (very early startup, or a
+      // failed keychain read). Treating that as signed out pauses sync, which
+      // is the safe answer — it never discards queued work.
       return 'signed_out';
     }
   }
@@ -127,7 +131,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     for (const cb of [...listeners]) cb(next);
   }
 
-  function observe(error: unknown | null): void {
+  function observe(error: unknown): void {
     queue.noteOutcome(error);
     if (error === null) network.noteSuccess();
     else network.noteFailure(error);

@@ -19,7 +19,7 @@
   "scripts": {
     "dev": "electron-vite dev --watch",
     "preview": "electron-vite preview",
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tests/e2e/tsconfig.json",
     "lint": "eslint . --max-warnings 0",
     "lint:css": "stylelint \"src/**/*.css\"",
     "format": "prettier --write .",

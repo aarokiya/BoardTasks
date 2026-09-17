@@ -20,7 +20,6 @@
     "src/renderer/src/commands/ids.ts",
     "tests/unit/**/*.ts",
     "tests/integration/**/*.ts",
-    "tests/e2e/**/*.ts",
     "tests/fixtures/**/*.ts",
     "tests/fakes/**/*.ts"
   ],

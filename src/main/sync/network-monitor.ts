@@ -1,6 +1,6 @@
 import type { Logger } from '../logger';
 import type { FetchLike } from '../api/http-client';
-import type { Clock, TimerHandle } from './clock';
+import type { Clock } from './clock';
 import { NetworkError } from '../api/errors';
 
 /**
@@ -86,7 +86,7 @@ export function createNetworkMonitor(opts: NetworkMonitorOptions): NetworkMonito
     if (suspended) return 'offline';
     if (!platform.isOnline()) return 'offline';
     const controller = new AbortController();
-    let timer: TimerHandle | null = clock.setTimeout(() => controller.abort(), probeTimeoutMs);
+    const timer = clock.setTimeout(() => controller.abort(), probeTimeoutMs);
     try {
       const res = await doFetch(probeUrl, {
         method: 'HEAD',
@@ -107,7 +107,6 @@ export function createNetworkMonitor(opts: NetworkMonitorOptions): NetworkMonito
       return 'offline';
     } finally {
       clock.clearTimeout(timer);
-      timer = null;
     }
   }
 

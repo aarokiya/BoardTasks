@@ -4,6 +4,7 @@ import { selectDefaultListId } from '../../store/selectors/views';
 import { useDelayedFlag } from '../../hooks/useDelayedFlag';
 import { Skeleton } from '../../components/Skeleton';
 import { InlineQuickAdd } from '../quickadd/InlineQuickAdd';
+import { GithubViewHeader } from '../github';
 import { TaskList } from './TaskList';
 import { BulkBar } from './BulkBar';
 import s from './TaskList.module.css';
@@ -32,6 +33,7 @@ export function TaskListPane(): ReactElement {
 
   return (
     <div className={s.pane}>
+      <GithubViewHeader />
       {inlineAddFor ? (
         <div className={s.quickAddSlot}>
           <InlineQuickAdd

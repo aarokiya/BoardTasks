@@ -45,8 +45,8 @@ export interface PullDeps {
   logger: Logger;
   queue: RequestQueue;
   priority: Priority;
-  /** Report every request outcome so the network monitor and AIMD can learn. */
-  observe(error: unknown | null): void;
+  /** Report every request outcome so the network monitor and AIMD can learn. `null` = success. */
+  observe(error: unknown): void;
 }
 
 export interface PullOptions {
@@ -255,11 +255,14 @@ async function reconcileDuplicates(deps: PullDeps, list: TaskList, items: readon
     deps.logger.warn(`adopted duplicate remote task ${keep.id} for local ${orphan.id} ("${orphan.title}")`);
 
     for (const extra of candidates.slice(1)) {
-      skip.add(extra.id);
       try {
         await run(deps, 'tasks.delete(dup)', () => deps.api.deleteTask(list.remoteId!, extra.id), list.id);
+        // Skip ONLY what we actually removed. If the delete failed the task is
+        // still on Google, and letting the merge import it shows the user a
+        // duplicate they can delete — far better than an invisible row that
+        // exists on the server and nowhere on this machine.
+        skip.add(extra.id);
       } catch (e) {
-        // Leaving a duplicate behind is bad; failing the whole pull is worse.
         deps.logger.warn(`could not delete duplicate ${extra.id}`, e);
       }
     }

@@ -10,7 +10,7 @@ import type { NetworkPlatform } from './network-monitor';
  * `net.fetch`, not global `fetch`: it routes through Chromium's network stack,
  * so system proxies, PAC scripts and enterprise CA roots work.
  */
-export const electronFetch: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
+export const electronFetch: FetchLike = (url, init) => net.fetch(url, init);
 
 export function createElectronNetworkPlatform(): NetworkPlatform {
   return {

@@ -12,6 +12,13 @@ registerAllCommands();
 
 const SHORTCUTS = buildShortcutMap();
 
+/** ⌘-shortcuts that fire even while focus is in a text field. */
+const ALLOWED_IN_EDITABLE = new Set<string>([
+  'nav.today', 'nav.upcoming', 'nav.overdue', 'nav.all', 'nav.nodate', 'nav.github', 'nav.completed', 'nav.list',
+  'view.palette', 'view.shortcuts', 'view.sidebar', 'view.inspector', 'view.zoomIn', 'view.zoomOut', 'view.zoomReset',
+  'create.list', 'sync.now', 'app.settings', 'edit.find',
+]);
+
 /** ⌘-shortcuts that stay live while a modal overlay is open. */
 const ALLOWED_IN_OVERLAY = new Set<CommandId>(['view.palette', 'view.shortcuts', 'view.zoomIn', 'view.zoomOut', 'view.zoomReset', 'app.settings']);
 
@@ -56,8 +63,11 @@ export function handleShortcutKey(e: KeyboardEvent): boolean {
     if (isEditable(e.target)) return false;
     if (store.overlay !== null) return false;
     if (!inTaskListScope(e.target)) return false;
-  } else if (store.overlay !== null && !ALLOWED_IN_OVERLAY.has(binding.id)) {
-    return false;
+  } else {
+    if (store.overlay !== null && !ALLOWED_IN_OVERLAY.has(binding.id)) return false;
+    // Inside a text field only navigation/app chords fire; ⌘Z/⌘A stay native and
+    // task chords (⌘⌫, ⌘D…) must never act on the list selection while typing.
+    if (isEditable(e.target) && !ALLOWED_IN_EDITABLE.has(binding.id)) return false;
   }
 
   e.preventDefault();

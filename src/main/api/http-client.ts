@@ -120,7 +120,7 @@ export function createHttpClient(opts: HttpClientOptions): HttpClient {
   }
 
   /** One wire round trip. Never retries; classification only. */
-  async function once(spec: RequestSpec, token: string): Promise<{ result: HttpResult<unknown>; status: number } | never> {
+  async function once(spec: RequestSpec, token: string): Promise<{ result: HttpResult<unknown>; status: number }> {
     const url = buildUrl(baseUrl, spec.path, spec.query);
     const controller = new AbortController();
     let timedOut = false;

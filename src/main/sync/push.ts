@@ -2,6 +2,7 @@ import { googleDueFromCivil, isCivil } from '@shared/date/civil';
 import { keyFromPosition } from '@shared/ids';
 import type { Logger } from '../logger';
 import { ApiError } from '../api/errors';
+import { AuthError } from '../auth/types';
 import type { GoogleTasksApi } from '../api/google-tasks';
 import type { RequestQueue } from '../api/request-queue';
 import type { GTask, TaskWriteBody } from '../api/schemas';
@@ -44,7 +45,8 @@ export interface PushDeps {
   random: Random;
   logger: Logger;
   queue: RequestQueue;
-  observe(error: unknown | null): void;
+  /** `null` = success. */
+  observe(error: unknown): void;
 }
 
 export interface PushResult {
@@ -54,7 +56,7 @@ export interface PushResult {
   parked: number;
   blocked: number;
   /** Set when an auth failure aborted the drain: the engine pauses. */
-  authError: unknown | null;
+  authError: AuthError | null;
   /** Set when a rate limit aborted the drain. */
   retryAfterMs: number | null;
   dailyLimit: boolean;
@@ -141,7 +143,7 @@ export async function runPush(deps: PushDeps): Promise<PushResult> {
 function handleFailure(deps: PushDeps, row: OutboxRow, e: unknown, nowMs: number, result: PushResult): boolean {
   const c = classifyError(e);
 
-  if (c.disposition === 'auth') {
+  if (c.disposition === 'auth' && e instanceof AuthError) {
     // Never park and never drop on auth: unsynced changes surviving a re-auth
     // is the whole point of local-first.
     updateOutbox(row.id, { status: 'pending', last_error: c.message, last_error_code: c.code });

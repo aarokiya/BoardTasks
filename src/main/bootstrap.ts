@@ -1,10 +1,10 @@
-import { app, nativeTheme } from 'electron';
+import { app, BrowserWindow, nativeTheme, net } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createLogger, initLogger } from './logger';
-import { isDev, isE2E, userDataOverride } from './env';
+import { githubBaseUrl, isDev, isE2E, userDataOverride } from './env';
 import { openDatabase, closeDatabase } from './db/connection';
-import { getSettings, onSettingsChanged } from './db/repositories/settings';
+import { getSettings, onSettingsChanged, setSettings } from './db/repositories/settings';
 import { installProtocolHandlers } from './security/protocols';
 import { installCsp } from './security/csp';
 import { hardenApp } from './security/harden';
@@ -14,6 +14,10 @@ import { emit, flushEmitter } from './ipc/emitter';
 import { createMainWindow, showMainWindow } from './windows/main-window';
 import { initQuickAddWindow } from './windows/quick-add-window';
 import { rendererDir } from './paths';
+import { initAuthService } from './auth/auth-service';
+import { startSync } from './sync';
+import { initGithubService } from './github/service';
+import { initPlatform, installPlatformHooks } from './platform';
 
 export interface AppContext {
   userData: string;
@@ -39,8 +43,17 @@ export function bootstrap(): AppContext {
     return { recoveredDb: r.recovered };
   })();
 
+  // E2E seam: skip the onboarding wizard on a fresh profile.
+  if (isE2E && process.env['BT_SKIP_ONBOARDING'] === '1' && !getSettings().onboardingComplete) {
+    setSettings({ onboardingComplete: true });
+  }
+  // Test drivers expect "close the window" to mean quit; close-to-tray would leave the process alive.
+  if (isE2E && getSettings().closeToTray) setSettings({ closeToTray: false, closeToTrayExplained: true });
   const settings = getSettings();
   nativeTheme.themeSource = settings.theme;
+
+  // Auth before routes: signOut({wipeLocalData}) touches the DB, and the sync engine needs the TokenProvider.
+  const auth = initAuthService();
 
   installProtocolHandlers(rendererDir(), join(userData, 'cache', 'images'));
   installCsp(app.isPackaged);
@@ -58,6 +71,24 @@ export function bootstrap(): AppContext {
 
   // Quick Add is lazily created; this only installs the window hooks.
   initQuickAddWindow();
+
+  // Sync engine (self-pauses while signed out; outbox routes need it regardless).
+  const sync = startSync({ tokens: auth });
+  installPlatformHooks({ syncNow: () => void sync.syncNow({ full: false }) });
+
+  // GitHub enrichment (works without a token: links are stored, enrichment skipped).
+  const github = initGithubService({
+    fetch: (url, init) => net.fetch(url, init),
+    baseUrl: githubBaseUrl,
+    isFocused: () => BrowserWindow.getFocusedWindow() !== null,
+  });
+
+  // Native integration LAST: it chains onto syncHooks.onTasksChanged, which startSync installed.
+  const disposePlatform = initPlatform();
+  if (recoveredDb) {
+    emit({ type: 'toast', level: 'warn', message: 'The local database was damaged and has been recreated. Your tasks will re-download from Google.' });
+    void sync.syncNow({ full: true });
+  }
 
   nativeTheme.on('updated', () => {
     emit({ type: 'theme:changed', resolved: nativeTheme.shouldUseDarkColors ? 'dark' : 'light', preference: getSettings().theme });
@@ -81,6 +112,9 @@ export function bootstrap(): AppContext {
     if (process.platform !== 'darwin') app.quit();
   });
   app.on('before-quit', () => {
+    disposePlatform();
+    github.stop();
+    sync.stop();
     flushEmitter();
     closeDatabase();
   });

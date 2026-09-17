@@ -10,7 +10,7 @@ interface Scripted {
   status: number;
   body?: unknown;
   headers?: Record<string, string>;
-  throws?: unknown;
+  throws?: Error;
 }
 
 interface Recorder {

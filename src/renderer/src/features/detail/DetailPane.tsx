@@ -25,7 +25,7 @@ import {
   IconList,
   IconTrash,
 } from '../../components/icons';
-import { GithubCard } from '../github';
+import { GithubCard, useGithubPaste } from '../github';
 import { ConflictBanner } from '../conflicts/ConflictBanner';
 import { SubtaskList } from './SubtaskList';
 import { DatePickerPopover } from './DatePickerPopover';
@@ -91,6 +91,8 @@ function TaskInspector({ task }: { task: Task }): ReactElement {
 
   const titleValue = titleDraft ?? task.title;
   const notesValue = notesDraft ?? task.notes;
+  const onTitlePaste = useGithubPaste({ taskId: task.id, field: 'title', value: titleValue, onChange: setTitleDraft });
+  const onNotesPaste = useGithubPaste({ taskId: task.id, field: 'notes', value: notesValue, onChange: setNotesDraft });
   const timeText = timeDraft ?? task.dueTime ?? '';
 
   useEffect(() => {
@@ -170,6 +172,7 @@ function TaskInspector({ task }: { task: Task }): ReactElement {
             className={cx(s.titleInput, completed && s.titleDone)}
             aria-label="Task title"
             value={titleValue}
+            onPaste={onTitlePaste}
             onChange={(e) => setTitleDraft(e.currentTarget.value)}
             onBlur={commitTitle}
             onKeyDown={(e) => {
@@ -319,6 +322,7 @@ function TaskInspector({ task }: { task: Task }): ReactElement {
             placeholder="Add notes…"
             minRows={3}
             value={notesValue}
+            onPaste={onNotesPaste}
             onChange={(e) => setNotesDraft(e.currentTarget.value)}
             onBlur={commitNotes}
             onKeyDown={(e) => {

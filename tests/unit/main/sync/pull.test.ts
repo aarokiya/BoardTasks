@@ -159,7 +159,7 @@ describe.each([
       h.google.clearCalls();
       await h.pull();
       const params = h.google.calls().find((c) => c.method === 'listTasks')!.args[0] as { updatedMin?: string };
-      expect(parseInstant(params.updatedMin!)).toBe(parseInstant(watermark)! - WATERMARK_SKEW_MS);
+      expect(parseInstant(params.updatedMin ?? '')).toBe((parseInstant(watermark) ?? 0) - WATERMARK_SKEW_MS);
     });
 
     it('omits updatedMin entirely on a full reconcile', async () => {

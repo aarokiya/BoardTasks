@@ -76,6 +76,8 @@ export interface FakeGoogle extends GoogleTasksApi {
   /** Every call fails with a NetworkError until `heal()`. */
   partition(): void;
   heal(): void;
+  /** Drop any scripted failures that were never consumed. */
+  clearFailures(): void;
   /** An edit from another device. */
   remoteEdit(taskId: string, patch: Partial<Pick<FakeTaskRow, 'title' | 'notes' | 'status' | 'due' | 'completed' | 'hidden'>>): FakeTaskRow;
   remoteDelete(taskId: string): void;
@@ -442,6 +444,9 @@ export function createFakeGoogle(opts: FakeGoogleOptions = {}): FakeGoogle {
     },
     heal() {
       partitioned = false;
+    },
+    clearFailures() {
+      failures.clear();
     },
     remoteEdit(taskId, patch) {
       const t = taskRows.find((x) => x.id === taskId);

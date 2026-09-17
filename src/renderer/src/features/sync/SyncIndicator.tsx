@@ -95,11 +95,15 @@ export function SyncIndicator(): ReactElement {
     if (sync === null) {
       return { state: 'connecting', word: 'Connecting…', icon: <span className={s.dot} />, tone: 'neutral' };
     }
+    // A parked change is not "synced": say so, in the danger tone, until it is retried or discarded.
+    if (failedCount > 0) {
+      return { state: 'error', word: `${failedCount} ${failedCount === 1 ? 'change' : 'changes'} didn't sync`, icon: <IconAlert size={13} />, tone: 'danger' };
+    }
     return { state: status === 'syncing' ? 'syncing' : 'idle', word: 'Synced', icon: <span className={s.dot} />, tone: 'neutral' };
   })();
 
   const lastAgo = formatAgo(sync?.lastSyncSucceededAt ?? null);
-  const ariaLabel = `Sync status: ${visual.word}${unsynced > 0 ? `, ${unsynced} unsynced ${unsynced === 1 ? 'change' : 'changes'}` : ''}`;
+  const ariaLabel = `Sync status: ${visual.word}${pendingCount > 0 ? `, ${pendingCount} unsynced ${pendingCount === 1 ? 'change' : 'changes'}` : ''}`;
 
   const run = async (fn: () => Promise<unknown>, failMessage: string): Promise<void> => {
     setBusy(true);
@@ -131,9 +135,9 @@ export function SyncIndicator(): ReactElement {
           {visual.icon}
         </span>
         <span className={s.text}>{visual.word}</span>
-        {unsynced > 0 ? (
+        {pendingCount > 0 && failedCount === 0 ? (
           <span className={s.badge} aria-hidden="true">
-            {unsynced}
+            {pendingCount}
           </span>
         ) : null}
       </button>

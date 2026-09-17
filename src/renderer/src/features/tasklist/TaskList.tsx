@@ -307,7 +307,7 @@ export function TaskList(): ReactElement {
     <div ref={scrollRef} className={s.scroller} data-density={density} data-testid="task-scroller">
       {withGhosts.length === 0 ? <ViewEmptyState view={view} filtered={filterQuery.trim().length > 0} /> : null}
       <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-        <div className={s.tree} role="tree" aria-label="Tasks" aria-multiselectable="true">
+        <div className={s.tree} role="tree" aria-label="Tasks" aria-multiselectable="true" data-bt-list>
           {virtualize ? (
             <VirtualRows rows={displayRows} scrollRef={scrollRef} rowHeight={rowHeight} renderRow={(row) => renderRow(row)} />
           ) : (

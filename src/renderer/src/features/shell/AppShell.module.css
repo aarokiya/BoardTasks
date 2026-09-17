@@ -16,6 +16,9 @@
 }
 
 .body {
+  /* Pinned: the banner row collapses to display:none when empty, and auto-placement
+     would otherwise drop the body into the `auto` row and leave the 1fr row empty. */
+  grid-row: 3;
   position: relative;
   display: grid;
   gap: var(--bt-space-2);
@@ -91,5 +94,5 @@
 }
 .detailBackLabel { font-size: var(--bt-text-13); font-weight: var(--bt-weight-medium); }
 
-.banner { padding: 0 var(--bt-space-2) var(--bt-space-2); }
+.banner { grid-row: 2; padding: 0 var(--bt-space-2) var(--bt-space-2); }
 .banner:empty { display: none; padding: 0; }

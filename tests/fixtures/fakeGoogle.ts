@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { AddressInfo } from 'node:net';
 
 /**
  * A real HTTP Google Tasks stand-in for E2E. The main process points at it via
@@ -72,6 +71,17 @@ export interface SeedFixture {
 }
 
 const JSON_TYPE = { 'content-type': 'application/json; charset=UTF-8' };
+
+/** Request bodies are untrusted JSON: narrow, never String()-coerce. */
+function str(v: unknown, fallback = ''): string {
+  return typeof v === 'string' ? v : fallback;
+}
+function nullableStr(v: unknown): string | null {
+  return typeof v === 'string' ? v : null;
+}
+function num(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
 
 function pos(index: number): string {
   return String((index + 1) * 100_000).padStart(20, '0');
@@ -295,7 +305,7 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
       if (method === 'GET') return send(res, 200, { kind: 'tasks#taskLists', items: state.lists.map(listJson) });
       if (method === 'POST') {
         const body = await readBody(req);
-        return send(res, 200, listJson(addList(String(body['title'] ?? ''))));
+        return send(res, 200, listJson(addList(str(body['title']))));
       }
       return googleError(res, 405, 'notImplemented', 'Method not allowed');
     }
@@ -308,7 +318,7 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
       if (method === 'GET') return send(res, 200, listJson(list));
       if (method === 'PATCH' || method === 'PUT') {
         const body = await readBody(req);
-        if (body['title'] !== undefined) list.title = String(body['title']);
+        if (body['title'] !== undefined) list.title = str(body['title'], list.title);
         list.updated = serverIso();
         list.etag = etag();
         return send(res, 200, listJson(list));
@@ -335,11 +345,11 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
         const row = addTask(
           listId,
           {
-            title: String(body['title'] ?? ''),
-            notes: body['notes'] === null || body['notes'] === undefined ? '' : String(body['notes']),
+            title: str(body['title']),
+            notes: str(body['notes']),
             status: body['status'] === 'completed' ? 'completed' : 'needsAction',
-            due: body['due'] === null || body['due'] === undefined ? null : String(body['due']),
-            completed: body['completed'] === null || body['completed'] === undefined ? null : String(body['completed']),
+            due: nullableStr(body['due']),
+            completed: nullableStr(body['completed']),
             parent,
           },
           previous,
@@ -359,12 +369,12 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
         const ifMatch = req.headers['if-match'];
         if (typeof ifMatch === 'string' && ifMatch !== t.etag) return googleError(res, 412, 'conditionNotMet', 'Precondition Failed');
         const body = await readBody(req);
-        if (body['title'] !== undefined) t.title = String(body['title']);
-        if (body['notes'] !== undefined) t.notes = body['notes'] === null ? '' : String(body['notes']);
-        if (body['due'] !== undefined) t.due = truncateDue(body['due'] === null ? null : String(body['due']));
+        if (body['title'] !== undefined) t.title = str(body['title'], t.title);
+        if (body['notes'] !== undefined) t.notes = str(body['notes']);
+        if (body['due'] !== undefined) t.due = truncateDue(nullableStr(body['due']));
         if (body['status'] !== undefined) {
           t.status = body['status'] === 'completed' ? 'completed' : 'needsAction';
-          t.completed = t.status === 'completed' ? String(body['completed'] ?? serverIso()) : null;
+          t.completed = t.status === 'completed' ? str(body['completed'], serverIso()) : null;
           if (t.status === 'needsAction') t.hidden = false;
         }
         t.updated = serverIso();
@@ -465,29 +475,29 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
         return send(res, 200, { offline: false });
       case '/__control/fail-next':
         state.failures.push({
-          method: String(body['method'] ?? 'GET').toUpperCase(),
-          path: body['path'] === undefined ? undefined : String(body['path']),
-          status: Number(body['status'] ?? 500),
-          times: Number(body['times'] ?? 1),
+          method: str(body['method'], 'GET').toUpperCase(),
+          path: typeof body['path'] === 'string' ? body['path'] : undefined,
+          status: num(body['status'], 500),
+          times: num(body['times'], 1),
         });
         return send(res, 200, { ok: true });
       case '/__control/rate-limit':
-        state.rateLimitUntil = Date.now() + Number(body['seconds'] ?? 1) * 1000;
+        state.rateLimitUntil = Date.now() + num(body['seconds'], 1) * 1000;
         return send(res, 200, { until: state.rateLimitUntil });
       case '/__control/skew':
-        state.skewMs = Number(body['ms'] ?? 0);
+        state.skewMs = num(body['ms'], 0);
         return send(res, 200, { skewMs: state.skewMs });
       case '/__control/tombstones':
         state.tombstonesInIncrementalPull = body['enabled'] !== false;
         return send(res, 200, { tombstonesInIncrementalPull: state.tombstonesInIncrementalPull });
       case '/__control/mutate': {
         // An edit from another device.
-        const t = state.tasks.find((x) => x.id === String(body['taskId']) && (!body['listId'] || x.listId === String(body['listId'])));
+        const t = state.tasks.find((x) => x.id === str(body['taskId']) && (!body['listId'] || x.listId === str(body['listId'])));
         if (!t) return send(res, 404, { error: 'no such task' });
         const patch = (body['patch'] ?? {}) as Record<string, unknown>;
-        if (patch['title'] !== undefined) t.title = String(patch['title']);
-        if (patch['notes'] !== undefined) t.notes = String(patch['notes']);
-        if (patch['due'] !== undefined) t.due = truncateDue(patch['due'] === null ? null : String(patch['due']));
+        if (patch['title'] !== undefined) t.title = str(patch['title'], t.title);
+        if (patch['notes'] !== undefined) t.notes = str(patch['notes'], t.notes);
+        if (patch['due'] !== undefined) t.due = truncateDue(nullableStr(patch['due']));
         if (patch['status'] !== undefined) {
           t.status = patch['status'] === 'completed' ? 'completed' : 'needsAction';
           t.completed = t.status === 'completed' ? serverIso() : null;
@@ -497,7 +507,7 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
         return send(res, 200, taskJson(t));
       }
       case '/__control/delete': {
-        const t = state.tasks.find((x) => x.id === String(body['taskId']));
+        const t = state.tasks.find((x) => x.id === str(body['taskId']));
         if (!t) return send(res, 404, { error: 'no such task' });
         t.deleted = true;
         t.updated = serverIso();
@@ -505,7 +515,7 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
         return send(res, 200, taskJson(t));
       }
       case '/__control/seed':
-        seed(body as SeedFixture);
+        seed(body);
         return send(res, 200, { ok: true });
       case '/__control/state':
         return send(res, 200, { lists: state.lists, tasks: state.tasks, order: state.order, requests: state.requests });
@@ -518,8 +528,9 @@ export async function startFakeGoogle(): Promise<FakeGoogleServer> {
   }
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const addr = server.address() as AddressInfo;
-  const url = `http://127.0.0.1:${addr.port}`;
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+  const url = `http://127.0.0.1:${port}`;
 
   return {
     url,

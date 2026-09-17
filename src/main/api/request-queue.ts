@@ -48,7 +48,7 @@ export interface QueueStats {
 export interface RequestQueue {
   submit<T>(opts: SubmitOptions<T>): Promise<T>;
   /** Report an outcome so AIMD can react. `null` = success. */
-  noteOutcome(error: unknown | null): void;
+  noteOutcome(error: unknown): void;
   stats(): QueueStats;
   /** Reject everything queued (used on sign-out / shutdown). */
   drainAndStop(): void;
@@ -185,7 +185,7 @@ export function createRequestQueue(opts: RequestQueueOptions): RequestQueue {
           priority: o.priority,
           serialKey: o.serialKey ?? null,
           label: o.label ?? '',
-          run: o.run as () => Promise<unknown>,
+          run: o.run,
           resolve: resolve as (v: unknown) => void,
           reject,
         };

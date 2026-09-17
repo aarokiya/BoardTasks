@@ -102,7 +102,9 @@ export function QuickAddField(props: QuickAddFieldProps): ReactElement {
   const onKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>): void => {
     // ⏎ during IME composition commits the composition, never the task.
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    e.stopPropagation();
+    // Plain keys are ours; ⌘/⌃ chords (⌘1…7, ⌘K, ⌘N…) bubble to KeyboardScope so
+    // navigation keeps working while typing. KeyboardScope filters what is safe in a text field.
+    if (!e.metaKey && !e.ctrlKey) e.stopPropagation();
 
     if (e.key === 'Enter') {
       e.preventDefault();

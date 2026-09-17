@@ -10,20 +10,28 @@ import { ApiError, NetworkError, RateLimitError } from '../../../../src/main/api
 import { closeDatabase, openDatabase } from '../../../../src/main/db/connection';
 import { bindListRemoteId, createList } from '../../../../src/main/db/repositories/lists';
 import { listOutboxRows, listParked, updateOutbox } from '../../../../src/main/db/repositories/outbox';
-import { createTask, deleteTasks, getAllTasks, getTaskRow, setStatus, updateTask } from '../../../../src/main/db/repositories/tasks';
+import {
+  createTask,
+  deleteTasks,
+  getAllTasks,
+  getTaskRow,
+  getTaskRowByRemoteId,
+  setStatus,
+  updateTask,
+} from '../../../../src/main/db/repositories/tasks';
 import { asCivil } from '../../../../src/shared/date/civil';
 import { createSyncHarness, type SyncHarness } from '../../../fakes/sync-harness';
-import type { FakeTaskRow } from '../../../fakes/fake-google-api';
 
 /**
  * Property test: random interleavings of local mutations, remote edits,
- * failures and partitions must always converge, and must never lose a write
- * the user could still see.
+ * scripted failures and network partitions must always converge, and must
+ * never lose a write the user could still see.
  *
  * "No lost writes" is the sharp one. A local edit may legitimately be
  * overwritten by the three-way merge — but only when the server ALSO changed
- * that field, in which case a conflict must be recorded. Silently dropping an
- * edit nobody contested is the bug this hunts for.
+ * that field, in which case a conflict is recorded. Quietly dropping an edit
+ * nobody contested, or holding a task that exists on Google but nowhere
+ * locally, is what this hunts for.
  */
 
 /** Tiny deterministic PRNG so a failing seed can be replayed exactly. */
@@ -38,6 +46,7 @@ function mulberry32(seed: number): () => number {
 }
 
 const DEFAULT_LIST = 'L-default';
+const STEP_GAP_MS = 10 * 60_000;
 let h: SyncHarness;
 let listId = '';
 
@@ -53,22 +62,22 @@ afterEach(() => {
   closeDatabase();
 });
 
-type Step =
-  | { kind: 'localCreate' }
-  | { kind: 'localRename' }
-  | { kind: 'localComplete' }
-  | { kind: 'localDue' }
-  | { kind: 'localDelete' }
-  | { kind: 'remoteEdit' }
-  | { kind: 'remoteInsert' }
-  | { kind: 'remoteDelete' }
-  | { kind: 'partition' }
-  | { kind: 'heal' }
-  | { kind: 'failOnce' }
-  | { kind: 'rateLimit' }
-  | { kind: 'sync' };
+type StepKind =
+  | 'localCreate'
+  | 'localRename'
+  | 'localComplete'
+  | 'localDue'
+  | 'localDelete'
+  | 'remoteEdit'
+  | 'remoteInsert'
+  | 'remoteDelete'
+  | 'partition'
+  | 'heal'
+  | 'failOnce'
+  | 'rateLimit'
+  | 'sync';
 
-const STEPS: Step['kind'][] = [
+const STEPS: StepKind[] = [
   'localCreate',
   'localCreate',
   'localRename',
@@ -90,6 +99,22 @@ const STEPS: Step['kind'][] = [
 
 function pick<T>(rng: () => number, arr: readonly T[]): T | undefined {
   return arr.length === 0 ? undefined : arr[Math.floor(rng() * arr.length)];
+}
+
+/** One push+pull cycle, driving the fake clock so in-flight timers fire. */
+async function cycle(opts: { full?: boolean } = {}): Promise<boolean> {
+  try {
+    // `settle` runs the clock while the cycle is in flight: a 429 empties the
+    // token bucket and arms a refill timer nothing else would release.
+    await h.settle(h.cycle(opts));
+    return true;
+  } catch (e) {
+    // Partitions and scripted failures are the point of the exercise.
+    if (!(e instanceof NetworkError || e instanceof ApiError)) throw e;
+    return false;
+  } finally {
+    await h.clock.flush();
+  }
 }
 
 async function runScenario(seed: number, steps: number): Promise<void> {
@@ -153,64 +178,35 @@ async function runScenario(seed: number, steps: number): Promise<void> {
         h.google.failNext('listTasks', new RateLimitError(1_000, false, 'rateLimitExceeded'), 1);
         break;
       case 'sync':
-        if (process.env['BT_TRACE']) console.error('> step', i);
-        await step();
-        if (process.env['BT_TRACE']) console.error('< step', i);
+        await cycle();
         break;
     }
-    // ADVANCE, not set: a 429 empties the token bucket and arms a refill
-    // timer, which only a clock that actually fires timers will release.
-    await h.clock.advance(10 * 60_000);
+    // ADVANCE, not set: backoff windows and token-bucket refills are timers.
+    await h.clock.advance(STEP_GAP_MS);
   }
 
-  // Quiesce: heal everything and sync until the system stops changing.
+  await quiesce();
+}
+
+/**
+ * Stop injecting faults and sync until nothing is left to do. Leftover
+ * scripted failures would otherwise be consumed by the very cycles that are
+ * meant to prove convergence.
+ */
+async function quiesce(): Promise<void> {
   h.google.heal();
-  for (let i = 0; i < 12; i++) {
-    if (process.env['BT_TRACE']) console.error('> quiesce', i, 'outbox', listOutboxRows(['pending', 'blocked']).length, 'queue', JSON.stringify(h.queue.stats()));
-    await step();
-    await h.clock.advance(10 * 60_000);
-    if (listOutboxRows(['pending', 'blocked']).length === 0) break;
+  h.google.clearFailures();
+  for (let i = 0; i < 15; i++) {
+    const ok = await cycle();
+    await h.clock.advance(STEP_GAP_MS);
+    if (ok && listOutboxRows(['pending', 'blocked']).length === 0) break;
   }
-  if (process.env['BT_TRACE']) console.error('> final full 1');
-  await step({ full: true });
-  if (process.env['BT_TRACE']) console.error('> final full 2');
-  await step({ full: true });
-  if (process.env['BT_TRACE']) console.error('> done');
-}
-
-async function step(opts: { full?: boolean } = {}): Promise<void> {
-  try {
-    if (process.env['BT_TRACE']) console.error('  push start');
-    await h.push();
-    if (process.env['BT_TRACE']) console.error('  push done; pull start');
-    if (process.env['BT_TRACE']) {
-      const before = h.google.calls().length;
-      const timer = setInterval(() => {
-        const recent = h.google.calls().slice(-4).map((c) => `${c.method}(${JSON.stringify(c.args[0]).slice(0, 60)})`);
-        console.error('  pull STILL RUNNING; calls', h.google.calls().length - before, recent.join(' | '));
-      }, 400);
-      try {
-        await h.pull(opts);
-      } finally {
-        clearInterval(timer);
-      }
-    } else {
-      await h.pull(opts);
-    }
-    if (process.env['BT_TRACE']) console.error('  pull done');
-  } catch (e) {
-    // Partitions and scripted 503s are expected; the point is what survives.
-    if (!(e instanceof NetworkError || e instanceof ApiError)) throw e;
-  }
-  await h.clock.flush();
-}
-
-function remoteById(id: string): FakeTaskRow | undefined {
-  return h.google.tasks().find((t) => t.id === id);
+  expect(await cycle({ full: true }), 'the final reconcile must succeed').toBe(true);
+  expect(await cycle({ full: true }), 'the confirming reconcile must succeed').toBe(true);
 }
 
 describe('sync convergence under random interleavings', () => {
-  const seeds = process.env['BT_TRACE'] ? [21] : [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233];
+  const seeds = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233];
 
   it.each(seeds)('seed %i converges with no silently lost writes', async (seed) => {
     await runScenario(seed, 40);
@@ -218,88 +214,99 @@ describe('sync convergence under random interleavings', () => {
     const locals = getAllTasks().filter((t) => !t.deleted);
     const remotes = h.google.tasks().filter((t) => !t.deleted && t.listId === DEFAULT_LIST);
     const parked = listParked();
+    const queuedFor = (id: string): boolean =>
+      listOutboxRows(['pending', 'blocked']).some((r) => r.entity_id === id) || parked.some((r) => r.entity_id === id);
 
     for (const task of locals) {
       const row = getTaskRow(task.id)!;
-
-      // 1. Anything still unsynced is visibly accounted for: queued, parked or
-      //    flagged as a conflict. Nothing is ever silently dropped.
-      const queued = listOutboxRows(['pending', 'blocked']).some((r) => r.entity_id === task.id);
-      const isParked = parked.some((r) => r.entity_id === task.id);
       const conflicted = row.conflict_json !== null;
 
+      // 1. A row that never reached Google is still visibly accounted for:
+      //    queued or parked. Nothing is ever silently dropped.
       if (row.remote_id === null) {
-        expect(queued || isParked, `local-only task ${task.title} must still be queued or parked`).toBe(true);
+        expect(queuedFor(task.id), `local-only task "${task.title}" must still be queued or parked`).toBe(true);
         continue;
       }
 
-      const remote = remoteById(row.remote_id);
+      const remote = h.google.tasks().find((t) => t.id === row.remote_id);
 
-      // 2. A row bound to a remote id whose remote is gone must be a conflict
-      //    (we kept a local edit) — never a silent divergence.
+      // 2. A row bound to a remote that is gone must be surfaced as a conflict
+      //    (we kept a local edit), never left quietly diverged.
       if (!remote || remote.deleted) {
-        expect(conflicted || queued || isParked, `orphaned task ${task.title} must be surfaced`).toBe(true);
+        expect(conflicted || queuedFor(task.id), `orphaned task "${task.title}" must be surfaced`).toBe(true);
         continue;
       }
 
-      // 3. Fully settled rows agree with the server, field by field.
-      if (!queued && !isParked && !conflicted) {
-        expect(row.title, `title diverged for ${task.id}`).toBe(remote.title);
-        expect(row.status, `status diverged for ${task.id}`).toBe(remote.status);
-        expect(row.due ?? null, `due diverged for ${task.id}`).toBe(remote.due ? remote.due.slice(0, 10) : null);
-        expect(row.dirty_fields, `settled rows carry no dirty fields`).toBe('[]');
+      // 3. Settled rows agree with the server, field by field.
+      if (!queuedFor(task.id) && !conflicted) {
+        expect(row.title, `title diverged for "${task.title}"`).toBe(remote.title);
+        expect(row.status, `status diverged for "${task.title}"`).toBe(remote.status);
+        expect(row.due ?? null, `due diverged for "${task.title}"`).toBe(remote.due ? remote.due.slice(0, 10) : null);
+        expect(row.dirty_fields, 'a settled row carries no dirty fields').toBe('[]');
       }
     }
 
-    // 4. Every live remote task is represented locally exactly once — no
-    //    duplicates from a non-idempotent insert, no missing rows.
+    // 4. Every live remote task exists locally. The row may be soft-deleted
+    //    (the user deleted it and the delete has not flushed), which is why
+    //    this looks at rows rather than the visible task list.
     for (const remote of remotes) {
-      const matches = getAllTasks().filter((t) => getTaskRow(t.id)!.remote_id === remote.id);
-      expect(matches.length, `remote ${remote.title} should map to exactly one local row`).toBe(1);
+      const row = getTaskRowByRemoteId(remote.id);
+      expect(row, `remote "${remote.title}" exists on Google but nowhere locally`).not.toBeNull();
+      if (row!.deleted === 1) {
+        expect(queuedFor(row!.id), `soft-deleted "${remote.title}" must still have its delete queued`).toBe(true);
+      }
     }
 
-    // 5. Local ids are stable: the store never renamed a primary key.
+    // 5. Once the queue is empty nothing is left unbound — no duplicates and
+    //    no stragglers from the non-idempotent insert.
+    if (listOutboxRows(['pending', 'blocked']).length === 0 && parked.length === 0) {
+      const unbound = getAllTasks().filter((t) => getTaskRow(t.id)!.remote_id === null);
+      expect(unbound.map((t) => t.title), 'nothing should be unsynced once the queue is empty').toEqual([]);
+    }
+
+    // 6. Local ids are stable: the store never renamed a primary key.
     const ids = getAllTasks().map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('a second quiet cycle changes nothing (the merge is a fixed point)', async () => {
     await runScenario(4242, 30);
-    const before = getAllTasks()
-      .map((t) => `${t.id}|${t.title}|${t.status}|${t.due ?? ''}|${t.sortKey}`)
-      .sort();
+    const snapshot = (): string[] =>
+      getAllTasks()
+        .map((t) => `${t.id}|${t.title}|${t.status}|${t.due ?? ''}|${t.sortKey}`)
+        .sort();
 
-    await step();
-    await step();
-
-    const after = getAllTasks()
-      .map((t) => `${t.id}|${t.title}|${t.status}|${t.due ?? ''}|${t.sortKey}`)
-      .sort();
-    expect(after).toEqual(before);
+    const before = snapshot();
+    await cycle();
+    await cycle();
+    expect(snapshot()).toEqual(before);
   });
 
   it('an offline burst survives a long partition and flushes completely', async () => {
     h.google.partition();
-    const created = [];
-    for (let i = 0; i < 25; i++) created.push(createTask({ title: `offline-${i}`, listId, previousId: 'end' }));
+    const created = Array.from({ length: 25 }, (_, i) => createTask({ title: `offline-${i}`, listId, previousId: 'end' }));
+
     for (let i = 0; i < 5; i++) {
-      await step();
-      await h.clock.advance(10 * 60_000);
+      expect(await cycle()).toBe(false);
+      await h.clock.advance(STEP_GAP_MS);
     }
     // Not one of them reached the server, and not one of them was lost.
     expect(h.google.tasks()).toHaveLength(0);
     expect(getAllTasks()).toHaveLength(25);
+    expect(listOutboxRows(['pending', 'blocked'])).toHaveLength(25);
 
-    h.google.heal();
-    for (let i = 0; i < 6; i++) {
-      await step();
-      await h.clock.advance(10 * 60_000);
-      if (listOutboxRows(['pending', 'blocked']).length === 0) break;
-    }
+    await quiesce();
 
     expect(listOutboxRows(['pending', 'blocked'])).toHaveLength(0);
     expect(listParked()).toHaveLength(0);
     expect(h.google.tasks().filter((t) => !t.deleted)).toHaveLength(25);
     expect(created.every((t) => getTaskRow(t.id)!.remote_id !== null)).toBe(true);
+    // ...and in the order the user made them.
+    const order = h.google
+      .tasks()
+      .slice()
+      .sort((a, b) => (a.position < b.position ? -1 : 1))
+      .map((t) => t.title);
+    expect(order).toEqual(created.map((t) => t.title));
   });
 });
