@@ -1,0 +1,135 @@
+/* Buttons -------------------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--bt-space-3);
+  border-radius: var(--bt-radius-sm); font-weight: var(--bt-weight-medium);
+  white-space: nowrap; cursor: default; position: relative;
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out), border-color var(--bt-dur-fast) var(--bt-ease-out), opacity var(--bt-dur-fast) var(--bt-ease-out);
+  border: 1px solid transparent;
+}
+.btn:disabled { opacity: 0.4; }
+.btn:not(:disabled):active { transform: translateY(0.5px); }
+
+.sizeSm { height: 24px; padding: 0 var(--bt-space-4); font-size: var(--bt-text-12); }
+.sizeMd { height: 28px; padding: 0 var(--bt-space-5); font-size: var(--bt-text-13); }
+.sizeLg { height: 34px; padding: 0 var(--bt-space-6); font-size: var(--bt-text-14); }
+
+.primary { background: var(--bt-accent); color: var(--bt-text-on-accent); }
+.primary:not(:disabled):hover { background: var(--bt-accent-hover); }
+.primary:not(:disabled):active { background: var(--bt-accent-active); }
+
+.secondary { background: var(--bt-surface-1); color: var(--bt-text-primary); border-color: var(--bt-border); box-shadow: var(--bt-shadow-xs); }
+.secondary:not(:disabled):hover { background: var(--bt-surface-2); border-color: var(--bt-border-strong); }
+.secondary:not(:disabled):active { background: var(--bt-surface-3); }
+
+.ghost { background: transparent; color: var(--bt-text-secondary); }
+.ghost:not(:disabled):hover { background: var(--bt-surface-3); color: var(--bt-text-primary); }
+.ghost:not(:disabled):active { background: var(--bt-surface-4); }
+
+.danger { background: var(--bt-danger); color: var(--bt-text-inverse); }
+.danger:not(:disabled):hover { filter: brightness(1.08); }
+
+.full { width: 100%; }
+
+/* Icon button ---------------------------------------------------------- */
+.iconBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--bt-radius-sm); color: var(--bt-text-secondary);
+  background: transparent; cursor: default; flex: none;
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out), color var(--bt-dur-fast) var(--bt-ease-out);
+}
+.iconBtn:hover:not(:disabled) { background: var(--bt-surface-3); color: var(--bt-text-primary); }
+.iconBtn:active:not(:disabled) { background: var(--bt-surface-4); }
+.iconBtn:disabled { opacity: 0.35; }
+.iconBtn[aria-pressed="true"], .iconActive { background: var(--bt-accent-subtle); color: var(--bt-accent-text); }
+.iconSm { width: 22px; height: 22px; }
+.iconMd { width: 26px; height: 26px; }
+.iconLg { width: 32px; height: 32px; }
+.iconDanger:hover:not(:disabled) { background: var(--bt-danger-subtle); color: var(--bt-danger); }
+
+/* Checkbox ------------------------------------------------------------- */
+.check { display: inline-flex; align-items: center; gap: var(--bt-space-4); cursor: default; font-size: var(--bt-text-13); color: var(--bt-text-primary); }
+.checkBox {
+  width: 15px; height: 15px; border-radius: var(--bt-radius-xs); flex: none;
+  border: 1px solid var(--bt-border-strong); background: var(--bt-surface-1);
+  display: inline-flex; align-items: center; justify-content: center; color: var(--bt-text-on-accent);
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out), border-color var(--bt-dur-fast) var(--bt-ease-out);
+}
+.checkOn { background: var(--bt-accent); border-color: var(--bt-accent); }
+.checkNative { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.checkDisabled { opacity: 0.45; }
+.checkHint { display: block; font-size: var(--bt-text-12); color: var(--bt-text-tertiary); margin-top: var(--bt-space-1); }
+
+/* Switch --------------------------------------------------------------- */
+.switch {
+  width: 34px; height: 20px; border-radius: var(--bt-radius-full); flex: none;
+  background: var(--bt-surface-4); position: relative; cursor: default;
+  transition: background-color var(--bt-dur-base) var(--bt-ease-out);
+  border: 1px solid var(--bt-border-subtle);
+}
+.switchOn { background: var(--bt-accent); border-color: var(--bt-accent); }
+.switchKnob {
+  position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: var(--bt-radius-full);
+  background: var(--bt-surface-1); box-shadow: var(--bt-shadow-sm);
+  transition: transform var(--bt-dur-base) var(--bt-ease-out);
+}
+.switchOn .switchKnob { transform: translateX(14px); }
+.switch:disabled { opacity: 0.4; }
+
+/* Chip ----------------------------------------------------------------- */
+.chip {
+  display: inline-flex; align-items: center; gap: var(--bt-space-2);
+  height: 18px; padding: 0 var(--bt-space-3); border-radius: var(--bt-radius-xs);
+  font-size: var(--bt-text-11); line-height: var(--bt-lh-11); font-weight: var(--bt-weight-medium);
+  background: var(--bt-surface-3); color: var(--bt-text-secondary);
+  white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.chipAccent { background: var(--bt-accent-subtle); color: var(--bt-accent-text); }
+.chipDanger { background: var(--bt-danger-subtle); color: var(--bt-danger); }
+.chipWarning { background: var(--bt-warning-subtle); color: var(--bt-warning); }
+.chipSuccess { background: var(--bt-success-subtle); color: var(--bt-success); }
+.chipButton { cursor: default; }
+.chipButton:hover { filter: brightness(0.97); }
+
+/* Kbd ------------------------------------------------------------------ */
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px;
+  padding: 0 var(--bt-space-2); border-radius: var(--bt-radius-xs);
+  background: var(--bt-surface-3); border: 1px solid var(--bt-border-subtle);
+  color: var(--bt-text-tertiary); font-family: var(--bt-font-sans); font-size: var(--bt-text-11);
+  line-height: 1; font-weight: var(--bt-weight-medium);
+}
+
+/* Input / Textarea ----------------------------------------------------- */
+.input, .textarea {
+  width: 100%; background: var(--bt-surface-1); color: var(--bt-text-primary);
+  border: 1px solid var(--bt-border); border-radius: var(--bt-radius-sm);
+  padding: 0 var(--bt-space-5); font-size: var(--bt-text-13);
+  transition: border-color var(--bt-dur-fast) var(--bt-ease-out), box-shadow var(--bt-dur-fast) var(--bt-ease-out);
+}
+.input { height: 28px; }
+.inputLg { height: 34px; font-size: var(--bt-text-14); }
+.textarea { padding: var(--bt-space-4) var(--bt-space-5); font-size: var(--bt-text-15); line-height: var(--bt-lh-15); resize: none; overflow: hidden; min-height: 60px; }
+.input::placeholder, .textarea::placeholder { color: var(--bt-text-quaternary); }
+.input:focus, .textarea:focus { outline: none; border-color: var(--bt-accent); box-shadow: 0 0 0 2px var(--bt-accent-subtle); }
+.inputInvalid, .inputInvalid:focus { border-color: var(--bt-danger); box-shadow: 0 0 0 2px var(--bt-danger-subtle); }
+.inputMono { font-family: var(--bt-font-mono); font-size: var(--bt-text-12); }
+.field { display: flex; flex-direction: column; gap: var(--bt-space-3); }
+.fieldLabel { font-size: var(--bt-text-12); font-weight: var(--bt-weight-medium); color: var(--bt-text-secondary); }
+.fieldError { font-size: var(--bt-text-12); color: var(--bt-danger); }
+.fieldHint { font-size: var(--bt-text-12); color: var(--bt-text-tertiary); }
+
+/* Segmented ------------------------------------------------------------ */
+.segmented {
+  display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--bt-radius-sm);
+  background: var(--bt-surface-3); border: 1px solid var(--bt-border-subtle);
+}
+.segment {
+  height: 22px; padding: 0 var(--bt-space-5); border-radius: var(--bt-radius-xs);
+  font-size: var(--bt-text-12); font-weight: var(--bt-weight-medium); color: var(--bt-text-secondary);
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--bt-space-2); cursor: default;
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out), color var(--bt-dur-fast) var(--bt-ease-out);
+}
+.segment:hover:not(.segmentOn) { color: var(--bt-text-primary); }
+.segmentOn { background: var(--bt-surface-1); color: var(--bt-text-primary); box-shadow: var(--bt-shadow-xs); }
+.segmentFull { flex: 1; }

@@ -2,7 +2,7 @@ import type { Task } from '@shared/models';
 import type { SmartViewId, ViewId } from '@shared/constants';
 import { addDays, type CivilDate } from '@shared/date/civil';
 import { formatUpcomingGroup } from '@shared/date/format';
-import type { State } from '../store';
+import type { GithubFilter, State } from '../store';
 
 export interface ViewContext {
   today: CivilDate;
@@ -19,6 +19,16 @@ export const predicates: Record<SmartViewId, (t: Task, c: ViewContext) => boolea
   nodate: (t) => isOpen(t) && t.due === null,
   github: (t) => isOpen(t) && t.github !== null,
   completed: (t) => t.status === 'completed' && !t.deleted,
+};
+
+/** GitHub smart-view filter pills. Tasks whose link failed to load stay visible under 'all'. */
+export const matchesGithubFilter = (t: Task, f: GithubFilter): boolean => {
+  const g = t.github;
+  if (!g) return false;
+  if (f === 'issues') return g.type === 'issue';
+  if (f === 'prs') return g.type === 'pull';
+  if (f === 'failing') return g.checks === 'failure';
+  return true;
 };
 
 export const listPredicate = (listId: string) => (t: Task, c: ViewContext): boolean =>
@@ -103,7 +113,7 @@ function matchesFilter(t: Task, q: string): boolean {
  * A subtask whose parent is not in the view is promoted to depth 0.
  */
 export const selectRows = memo(
-  (s) => [s.version, s.view, s.today, s.filterQuery, s.collapsedParents, s.showCompletedByList, s.settings?.showCompletedInLists] as const,
+  (s) => [s.version, s.view, s.today, s.filterQuery, s.collapsedParents, s.showCompletedByList, s.settings?.showCompletedInLists, s.githubFilter] as const,
   (s): Row[] => {
     const view = s.view;
     const listId = view.startsWith('list:') ? view.slice(5) : null;
@@ -162,7 +172,8 @@ export const selectRows = memo(
       }
       case 'github': {
         const order: Array<[string, string]> = [['open', 'Open'], ['draft', 'Draft'], ['merged', 'Merged'], ['closed', 'Closed'], ['unknown', 'Unknown']];
-        for (const [state, label] of order) group(state, label, tops.filter((t) => (t.github?.state ?? 'unknown') === state), (a, b) => `${a.github?.owner}/${a.github?.repo}`.localeCompare(`${b.github?.owner}/${b.github?.repo}`) || (b.github?.number ?? 0) - (a.github?.number ?? 0));
+        const ghTops = tops.filter((t) => matchesGithubFilter(t, s.githubFilter));
+        for (const [state, label] of order) group(state, label, ghTops.filter((t) => (t.github?.state ?? 'unknown') === state), (a, b) => `${a.github?.owner}/${a.github?.repo}`.localeCompare(`${b.github?.owner}/${b.github?.repo}`) || (b.github?.number ?? 0) - (a.github?.number ?? 0));
         break;
       }
       case 'all':

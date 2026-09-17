@@ -132,3 +132,25 @@ export function updateOutbox(id: string, patch: Partial<Pick<OutboxRow, 'status'
 export function vacuumDone(): void {
   getDb().prepare(`DELETE FROM outbox WHERE status = 'done' AND updated_at < ?`).run(new Date(Date.now() - 7 * 86_400_000).toISOString());
 }
+
+// ---------- sync-engine helpers (additive; the sync track owns the semantics) ----------
+
+/** Raw rows in FIFO order for the outbox drain. Defaults to everything not done. */
+export function listOutboxRows(statuses?: readonly OutboxRow['status'][]): OutboxRow[] {
+  const db = getDb();
+  if (!statuses || statuses.length === 0) {
+    return db.prepare(`SELECT * FROM outbox WHERE status != 'done' ORDER BY seq ASC`).all() as OutboxRow[];
+  }
+  const holes = statuses.map(() => '?').join(',');
+  return db.prepare(`SELECT * FROM outbox WHERE status IN (${holes}) ORDER BY seq ASC`).all(...statuses) as OutboxRow[];
+}
+
+/** True when anything is still queued for an entity (pull must not delete it). */
+export function hasPendingForEntity(entityId: string): boolean {
+  return !!getDb().prepare(`SELECT 1 FROM outbox WHERE entity_id = ? AND status != 'done' LIMIT 1`).get(entityId);
+}
+
+/** Rows left 'inflight' by a crash: nothing is actually in flight after a restart. */
+export function recoverInflight(): number {
+  return getDb().prepare(`UPDATE outbox SET status = 'pending', updated_at = ? WHERE status = 'inflight'`).run(nowIso()).changes;
+}

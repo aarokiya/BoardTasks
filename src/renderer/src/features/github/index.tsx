@@ -1,16 +1,10 @@
-import type { ReactElement } from 'react';
-import type { GithubLink, Task } from '@shared/models';
 /** Owned by the GitHub track. These named exports are the contract other tracks import. */
-export function GithubChip(_p: { link: GithubLink; compact?: boolean }): ReactElement | null {
-  return null;
-}
-export function GithubCard(_p: { task: Task }): ReactElement | null {
-  return null;
-}
-export function GithubConnectSettings(): ReactElement | null {
-  return null;
-}
+export { GithubChip, type GithubChipProps } from './GithubChip';
+export { GithubCard } from './GithubCard';
+export { GithubConnectSettings } from './GithubConnectSettings';
 /** Rendered when store.overlay === 'github-picker'; overlayPayload = { taskId }. */
-export function GithubPickerOverlay(): ReactElement | null {
-  return null;
-}
+export { GithubPickerOverlay } from './GithubPickerOverlay';
+export { GithubViewHeader } from './GithubViewHeader';
+export { useGithubPaste, type UseGithubPasteOptions } from './useGithubPaste';
+export { GithubStateGlyph, glyphFor, isStale, stateLabel, errorCopy, type GlyphKind } from './glyphs';
+export { canonicalGithubUrl, findGithubRefIn, parseGithubUrl, shortGithubLabel, type GithubRef } from './parseUrl';

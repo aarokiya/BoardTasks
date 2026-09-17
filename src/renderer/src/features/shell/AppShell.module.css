@@ -1,0 +1,95 @@
+.shell {
+  height: 100%;
+  display: grid;
+  grid-template-rows: var(--bt-titlebar-h) auto minmax(0, 1fr);
+  background: var(--bt-bg-app);
+  position: relative;
+  isolation: isolate;
+}
+
+/* The drag region is an absolutely-positioned sibling BEHIND the titlebar
+   content, never an ancestor of it — otherwise every control inherits drag. */
+.dragRegion {
+  position: absolute; inset: 0 0 auto; height: var(--bt-titlebar-h);
+  -webkit-app-region: drag;
+  z-index: 0;
+}
+
+.body {
+  position: relative;
+  display: grid;
+  gap: var(--bt-space-2);
+  padding: 0 var(--bt-space-2) var(--bt-space-2);
+  min-height: 0;
+}
+
+.pane {
+  background: var(--bt-surface-1);
+  border-radius: var(--bt-radius-lg);
+  border: 1px solid var(--bt-border-subtle);
+  box-shadow: var(--bt-shadow-sm);
+  min-width: 0; min-height: 0;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+.sidebarPane { background: var(--bt-bg-sidebar); }
+.sidebarTranslucent { background: var(--bt-bg-sidebar-alpha); backdrop-filter: saturate(180%) blur(22px); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .sidebarTranslucent { background: var(--bt-bg-sidebar); backdrop-filter: none; }
+}
+
+/* Divider ---------------------------------------------------------------- */
+.divider {
+  position: absolute; top: 0; bottom: 0; width: 8px;
+  cursor: col-resize; z-index: var(--bt-z-sticky);
+  display: grid; place-items: center;
+  background: transparent;
+}
+.dividerLine {
+  width: 1px; height: 100%; background: transparent;
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out);
+}
+.divider:hover .dividerLine, .divider:focus-visible .dividerLine, .dividerActive .dividerLine { background: var(--bt-accent); }
+.divider:focus-visible { outline: none; }
+
+/* Sidebar overlay (620–779px and below) ---------------------------------- */
+.sidebarScrim {
+  position: absolute; inset: 0; z-index: var(--bt-z-overlay);
+  background: var(--bt-scrim);
+  animation: fade-in var(--bt-dur-fast) var(--bt-ease-out);
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.sidebarOverlay {
+  position: absolute; top: 0; left: 0; bottom: 0; z-index: calc(var(--bt-z-overlay) + 1);
+  width: var(--bt-sidebar-w);
+  box-shadow: var(--bt-shadow-xl);
+  animation: slide-in-left var(--bt-dur-base) var(--bt-ease-out);
+}
+
+@keyframes slide-in-left { from { transform: translateX(-100%); } to { transform: none; } }
+
+/* Detail as a right sheet / full-screen push ----------------------------- */
+.detailSheet {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--bt-z-overlay);
+  box-shadow: var(--bt-shadow-xl);
+  animation: slide-in-right var(--bt-dur-base) var(--bt-ease-out);
+}
+
+@keyframes slide-in-right { from { transform: translateX(100%); } to { transform: none; } }
+.detailFullscreen {
+  position: absolute; inset: 0; z-index: var(--bt-z-overlay);
+  animation: slide-in-right var(--bt-dur-base) var(--bt-ease-out);
+}
+.detailBackBar {
+  display: flex; align-items: center; gap: var(--bt-space-3);
+  height: 38px; padding: 0 var(--bt-space-4);
+  border-bottom: 1px solid var(--bt-border-subtle);
+  flex: none;
+}
+.detailBackLabel { font-size: var(--bt-text-13); font-weight: var(--bt-weight-medium); }
+
+.banner { padding: 0 var(--bt-space-2) var(--bt-space-2); }
+.banner:empty { display: none; padding: 0; }

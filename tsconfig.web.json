@@ -16,6 +16,10 @@
     "src/shared/**/*.ts",
     "src/preload/index.d.ts",
     "tests/setup/**/*.ts",
-    "tests/setup/**/*.tsx"
+    "tests/setup/**/*.tsx",
+    "tests/dom/**/*.ts",
+    "tests/dom/**/*.tsx",
+    "tests/unit/renderer/**/*.ts",
+    "tests/unit/renderer/**/*.tsx"
   ]
 }

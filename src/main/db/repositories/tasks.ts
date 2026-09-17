@@ -389,3 +389,16 @@ export function hardDeleteTask(id: string): void {
 export function allTaskRowsInList(listId: string): TaskRow[] {
   return getDb().prepare('SELECT * FROM tasks WHERE list_id = ?').all(listId) as TaskRow[];
 }
+
+export function getTaskRowByRemoteId(remoteId: string): TaskRow | null {
+  return (getDb().prepare('SELECT * FROM tasks WHERE remote_id = ?').get(remoteId) as TaskRow | undefined) ?? null;
+}
+
+export function countConflicts(): number {
+  return (getDb().prepare('SELECT COUNT(*) c FROM tasks WHERE conflict_json IS NOT NULL AND deleted = 0').get() as { c: number }).c;
+}
+
+/** Rows carrying an unresolved conflict, for the conflict sheet. */
+export function conflictedTasks(): Task[] {
+  return hydrate(getDb().prepare(`${SELECT} WHERE t.conflict_json IS NOT NULL AND t.deleted = 0`).all() as TaskRow[]);
+}

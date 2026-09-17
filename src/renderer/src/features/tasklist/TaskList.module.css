@@ -1,0 +1,106 @@
+.pane { display: flex; flex-direction: column; height: 100%; min-height: 0; position: relative; }
+
+.scroller {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  padding: var(--bt-space-3) var(--bt-space-3) var(--bt-space-10);
+  --bt-row-h: var(--bt-row-h-default);
+  --bt-row-indent: 24px;
+}
+.scroller[data-density="compact"] { --bt-row-h: var(--bt-row-h-compact); }
+.scroller[data-density="comfortable"] { --bt-row-h: var(--bt-row-h-comfortable); }
+
+.tree { position: relative; }
+.virtualInner { position: relative; width: 100%; }
+.virtualRow { position: absolute; top: 0; left: 0; width: 100%; }
+
+.groupHeader {
+  display: flex; align-items: center; gap: var(--bt-space-3);
+  height: 26px; padding: 0 var(--bt-space-5);
+  margin-top: var(--bt-space-5);
+  font-size: var(--bt-text-11); line-height: var(--bt-lh-11);
+  text-transform: uppercase; letter-spacing: var(--bt-tracking-wide);
+  font-weight: var(--bt-weight-semibold); color: var(--bt-text-quaternary);
+  position: sticky; top: 0; z-index: var(--bt-z-sticky);
+  background: var(--bt-surface-1);
+  cursor: default; width: 100%; text-align: left;
+}
+.groupHeader:first-child { margin-top: 0; }
+.groupHeaderOverdue { color: var(--bt-overdue); }
+.groupCount { font-variant-numeric: tabular-nums; opacity: 0.75; }
+.groupChevron { display: inline-flex; transition: transform var(--bt-dur-fast) var(--bt-ease-out); }
+.groupChevronCollapsed { transform: rotate(-90deg); }
+
+/* Ghost row: the 220ms collapse when a task leaves the current view. */
+.ghost {
+  overflow: hidden;
+  animation: collapse-row 220ms var(--bt-ease-in-out) forwards;
+  pointer-events: none;
+}
+
+@keyframes collapse-row {
+  from { height: var(--bt-row-h); opacity: 0.6; }
+  to { height: 0; opacity: 0; }
+}
+
+/* Drop indicator ------------------------------------------------------- */
+.dropLine {
+  position: absolute; left: 0; right: var(--bt-space-4); height: 2px;
+  background: var(--bt-accent); border-radius: var(--bt-radius-full);
+  pointer-events: none; z-index: var(--bt-z-sticky);
+}
+.dropLine::before {
+  content: ""; position: absolute; left: -1px; top: -3px;
+  width: 8px; height: 8px; border-radius: var(--bt-radius-full);
+  background: var(--bt-accent);
+}
+
+.dragPreview {
+  background: var(--bt-surface-raised);
+  border-radius: var(--bt-radius-sm);
+  box-shadow: var(--bt-shadow-drag);
+  padding: 0 var(--bt-space-5);
+  height: var(--bt-row-h-default);
+  display: flex; align-items: center; gap: var(--bt-space-4);
+  font-size: var(--bt-text-13); color: var(--bt-text-primary);
+  max-width: 420px; overflow: hidden; white-space: nowrap;
+}
+.dragCount {
+  margin-left: var(--bt-space-3); font-size: var(--bt-text-11);
+  background: var(--bt-accent); color: var(--bt-text-on-accent);
+  border-radius: var(--bt-radius-full); padding: 0 var(--bt-space-3);
+}
+
+/* Skeletons ------------------------------------------------------------ */
+.skeletonRow { display: flex; align-items: center; gap: var(--bt-space-5); height: var(--bt-row-h-default); padding: 0 var(--bt-space-5); }
+
+/* Bulk bar ------------------------------------------------------------- */
+.bulkBar {
+  position: absolute; left: 50%; bottom: var(--bt-space-6); transform: translateX(-50%);
+  z-index: var(--bt-z-dropdown);
+  display: flex; align-items: center; gap: var(--bt-space-4);
+  padding: var(--bt-space-4) var(--bt-space-4) var(--bt-space-4) var(--bt-space-6);
+  border-radius: var(--bt-radius-lg);
+  background: var(--bt-surface-raised); border: 1px solid var(--bt-border);
+  box-shadow: var(--bt-shadow-lg);
+  animation: bulk-in var(--bt-dur-base) var(--bt-ease-out);
+  max-width: calc(100% - var(--bt-space-8));
+}
+
+@keyframes bulk-in {
+  from { opacity: 0; transform: translate(-50%, 16px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.bulkCount { font-size: var(--bt-text-13); font-weight: var(--bt-weight-medium); white-space: nowrap; }
+.bulkSep { width: 1px; height: 18px; background: var(--bt-border-subtle); }
+
+.quickAddSlot { padding: var(--bt-space-3) var(--bt-space-3) 0; flex: none; }
+.filterEmpty { padding: var(--bt-space-8); }
+
+.rowWrap { position: relative; }
+
+.ghostRow {
+  display: flex; align-items: center; height: var(--bt-row-h, var(--bt-row-h-default));
+  padding: 0 var(--bt-space-4) 0 calc(var(--bt-space-3) + 28px);
+  font-size: var(--bt-text-13); color: var(--bt-text-quaternary);
+  text-decoration: line-through; white-space: nowrap; overflow: hidden;
+}

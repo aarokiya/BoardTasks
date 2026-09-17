@@ -12,6 +12,7 @@ import { registerRoutes } from './ipc/router';
 import { buildRoutes } from './ipc/routes';
 import { emit, flushEmitter } from './ipc/emitter';
 import { createMainWindow, showMainWindow } from './windows/main-window';
+import { initQuickAddWindow } from './windows/quick-add-window';
 import { rendererDir } from './paths';
 
 export interface AppContext {
@@ -54,6 +55,9 @@ export function bootstrap(): AppContext {
     showOnCreate: !process.argv.includes('--hidden'),
     translucent: settings.translucentSidebar,
   });
+
+  // Quick Add is lazily created; this only installs the window hooks.
+  initQuickAddWindow();
 
   nativeTheme.on('updated', () => {
     emit({ type: 'theme:changed', resolved: nativeTheme.shouldUseDarkColors ? 'dark' : 'light', preference: getSettings().theme });

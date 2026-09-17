@@ -1,0 +1,76 @@
+.sidebar { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: var(--bt-space-4) var(--bt-space-3) var(--bt-space-5); }
+.rail .scroll { padding: var(--bt-space-4) var(--bt-space-2); }
+
+.sectionLabel {
+  font-size: var(--bt-text-11); line-height: var(--bt-lh-11);
+  text-transform: uppercase; letter-spacing: var(--bt-tracking-wide);
+  font-weight: var(--bt-weight-semibold); color: var(--bt-text-quaternary);
+  padding: var(--bt-space-5) var(--bt-space-4) var(--bt-space-3);
+}
+.rail .sectionDivider { height: 1px; background: var(--bt-border-subtle); margin: var(--bt-space-4) var(--bt-space-3); }
+
+.row {
+  display: flex; align-items: center; gap: var(--bt-space-4);
+  width: 100%; height: 28px; padding: 0 var(--bt-space-4);
+  border-radius: var(--bt-radius-sm); cursor: default;
+  font-size: var(--bt-text-13); color: var(--bt-text-secondary);
+  position: relative;
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out), color var(--bt-dur-fast) var(--bt-ease-out);
+}
+.row:hover { background: var(--bt-surface-3); color: var(--bt-text-primary); }
+.rowCurrent, .rowCurrent:hover { background: var(--bt-surface-selected); color: var(--bt-text-primary); font-weight: var(--bt-weight-medium); }
+.rowDropTarget { box-shadow: inset 0 0 0 2px var(--bt-accent); background: var(--bt-accent-subtle); }
+.rowDragging { opacity: 0.45; }
+
+.rowIcon { flex: none; display: inline-flex; color: var(--bt-text-tertiary); }
+.rowCurrent .rowIcon { color: var(--bt-accent-text); }
+.rowLabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.rowActions { display: flex; align-items: center; gap: var(--bt-space-2); flex: none; }
+
+.dot { width: 9px; height: 9px; border-radius: var(--bt-radius-full); flex: none; }
+
+.badge {
+  font-size: var(--bt-text-11); line-height: var(--bt-lh-11); font-variant-numeric: tabular-nums;
+  color: var(--bt-text-quaternary); flex: none; min-width: 14px; text-align: right;
+}
+.badgeUrgent {
+  color: var(--bt-text-on-accent); background: var(--bt-overdue);
+  border-radius: var(--bt-radius-full); padding: 0 var(--bt-space-3); min-width: 17px; text-align: center;
+  font-weight: var(--bt-weight-semibold);
+}
+.badgeDanger { color: var(--bt-overdue); font-weight: var(--bt-weight-semibold); }
+.badgeMuted { opacity: 0; transition: opacity var(--bt-dur-fast) var(--bt-ease-out); }
+.row:hover .badgeMuted, .rowCurrent .badgeMuted { opacity: 1; }
+
+.syncDot { width: 6px; height: 6px; border-radius: var(--bt-radius-full); background: var(--bt-warning); flex: none; }
+.syncFailed { color: var(--bt-danger); display: inline-flex; flex: none; }
+
+.renameInput {
+  flex: 1; min-width: 0; height: 22px;
+  background: var(--bt-surface-1); color: var(--bt-text-primary);
+  border: 1px solid var(--bt-accent); border-radius: var(--bt-radius-xs);
+  padding: 0 var(--bt-space-3); font-size: var(--bt-text-13); outline: none;
+}
+
+.footer { flex: none; padding: var(--bt-space-3); border-top: 1px solid var(--bt-border-subtle); }
+.newList { display: flex; align-items: center; gap: var(--bt-space-4); width: 100%; height: 28px; padding: 0 var(--bt-space-4); border-radius: var(--bt-radius-sm); font-size: var(--bt-text-13); color: var(--bt-text-tertiary); cursor: default; }
+.newList:hover { background: var(--bt-surface-3); color: var(--bt-text-primary); }
+
+.railRow { justify-content: center; height: 34px; padding: 0; }
+.railRow .rowLabel { display: none; }
+.railBadge {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: var(--bt-radius-full); background: var(--bt-accent); color: var(--bt-text-on-accent);
+  font-size: 9px; line-height: 14px; text-align: center; font-variant-numeric: tabular-nums;
+}
+.railBadgeUrgent { background: var(--bt-overdue); }
+
+.signedOutNote {
+  font-size: var(--bt-text-11); line-height: var(--bt-lh-12); color: var(--bt-text-quaternary);
+  padding: var(--bt-space-4); margin-top: var(--bt-space-3);
+  border-top: 1px solid var(--bt-border-subtle);
+}
+
+.railWrap { display: block; }

@@ -1,0 +1,138 @@
+.root {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--bt-space-3);
+  min-width: 0;
+}
+
+.field {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+/* The mirror paints the token highlights behind a transparent-text input, so
+   the caret and selection stay native. Both must share every text metric. */
+.mirror,
+.input {
+  width: 100%;
+  padding: var(--bt-space-2) 0;
+  font-family: var(--bt-font-sans);
+  font-size: var(--bt-text-14);
+  line-height: var(--bt-lh-14);
+  letter-spacing: var(--bt-tracking-normal);
+  white-space: pre;
+  border: none;
+}
+
+.mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--bt-text-primary);
+  pointer-events: none;
+}
+
+.input {
+  position: relative;
+  color: transparent;
+  background: transparent;
+  outline: none;
+  caret-color: var(--bt-text-primary);
+}
+
+.input::selection { color: transparent; background: var(--bt-accent-subtle); }
+
+.placeholder { color: var(--bt-text-quaternary); }
+
+.tok {
+  padding: 1px 0;
+  border-radius: var(--bt-radius-xs);
+  box-shadow: 0 0 0 2px var(--bt-accent-subtle);
+  background: var(--bt-accent-subtle);
+  color: var(--bt-accent-text);
+}
+
+.tok_date, .tok_time { background: var(--bt-accent-subtle); box-shadow: 0 0 0 2px var(--bt-accent-subtle); color: var(--bt-accent-text); }
+.tok_list { background: var(--bt-success-subtle); box-shadow: 0 0 0 2px var(--bt-success-subtle); color: var(--bt-success); }
+.tok_priority, .tok_flag { background: var(--bt-warning-subtle); box-shadow: 0 0 0 2px var(--bt-warning-subtle); color: var(--bt-warning); }
+.tok_notes { background: var(--bt-surface-3); box-shadow: 0 0 0 2px var(--bt-surface-3); color: var(--bt-text-tertiary); }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bt-space-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bt-space-2);
+  max-width: 220px;
+  overflow: hidden;
+  padding: 1px var(--bt-space-4);
+  font: inherit;
+  font-size: var(--bt-text-11);
+  line-height: 18px;
+  font-weight: var(--bt-weight-medium);
+  color: var(--bt-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--bt-surface-3);
+  border: 0.5px solid var(--bt-border-subtle);
+  border-radius: var(--bt-radius-full);
+  cursor: default;
+}
+
+.date, .time { color: var(--bt-accent-text); background: var(--bt-accent-subtle); border-color: var(--bt-accent-border); }
+.list { color: var(--bt-success); background: var(--bt-success-subtle); }
+.priority, .flag { color: var(--bt-warning); background: var(--bt-warning-subtle); }
+.notes { color: var(--bt-text-tertiary); }
+.warn { color: var(--bt-warning); background: var(--bt-warning-subtle); }
+
+.popoverAnchor {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: var(--bt-z-dropdown);
+  margin-top: var(--bt-space-2);
+}
+
+.menu {
+  width: 200px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--bt-space-2);
+  list-style: none;
+  background: var(--bt-surface-raised);
+  border: 0.5px solid var(--bt-border);
+  border-radius: var(--bt-radius-lg);
+  box-shadow: var(--bt-shadow-lg);
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: var(--bt-space-2) var(--bt-space-4);
+  font: inherit;
+  font-size: var(--bt-text-13);
+  color: var(--bt-text-primary);
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--bt-radius-xs);
+  cursor: default;
+}
+
+.menuItem:hover { background: var(--bt-surface-3); }
+
+.hud .mirror,
+.hud .input {
+  padding: var(--bt-space-3) 0;
+  font-family: var(--bt-font-display);
+  font-size: var(--bt-text-17);
+  line-height: var(--bt-lh-17);
+  letter-spacing: var(--bt-tracking-tight);
+}

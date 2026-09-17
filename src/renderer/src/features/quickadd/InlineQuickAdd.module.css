@@ -1,0 +1,18 @@
+.row {
+  display: flex;
+  gap: var(--bt-space-4);
+  align-items: flex-start;
+  padding: var(--bt-space-3) var(--bt-space-5);
+  background: var(--bt-surface-2);
+  border: 0.5px solid var(--bt-accent-border);
+  border-radius: var(--bt-radius-md);
+}
+
+.bullet {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border: 1.5px dashed var(--bt-border-strong);
+  border-radius: var(--bt-radius-full);
+}

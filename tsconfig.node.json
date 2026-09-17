@@ -17,9 +17,13 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
+    "src/renderer/src/commands/ids.ts",
     "tests/unit/**/*.ts",
     "tests/integration/**/*.ts",
     "tests/e2e/**/*.ts",
-    "tests/fixtures/**/*.ts"
-  ]
+    "tests/fixtures/**/*.ts",
+    "tests/fakes/**/*.ts"
+  ],
+  "//": "Renderer-only unit tests live in the web project: they import src/renderer sources, which this project must never see.",
+  "exclude": ["tests/unit/renderer/**"]
 }

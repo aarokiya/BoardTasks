@@ -137,3 +137,13 @@ export function hardDeleteList(id: string): void {
 export function getAllListsIncludingDeleted(): TaskList[] {
   return (getDb().prepare(`${SELECT}`).all() as ListRow[]).map(rowToList);
 }
+
+/** Raw row (sync needs remote_id / etag, which TaskList does not carry). */
+export function getListRow(id: string): ListRow | null {
+  return (getDb().prepare('SELECT * FROM task_lists WHERE id = ?').get(id) as ListRow | undefined) ?? null;
+}
+
+/** Undo a soft delete (used when a queued `list.delete` is discarded). */
+export function restoreListRow(id: string): void {
+  getDb().prepare('UPDATE task_lists SET deleted = 0, local_updated_at = ?, rev = rev + 1 WHERE id = ?').run(nowIso(), id);
+}

@@ -1,0 +1,107 @@
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bt-space-5);
+  padding: var(--bt-space-5) var(--bt-space-6);
+  border: 1px solid var(--bt-warning);
+  border-radius: var(--bt-radius-md);
+  background: var(--bt-warning-subtle);
+  color: var(--bt-text-primary);
+}
+
+.bannerDeleted {
+  border-color: var(--bt-danger);
+  background: var(--bt-danger-subtle);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--bt-space-4);
+}
+
+.headIcon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--bt-warning);
+}
+
+.bannerDeleted .headIcon { color: var(--bt-danger); }
+
+.headText { flex: 1; min-width: 0; }
+
+.title {
+  font-size: var(--bt-text-13);
+  font-weight: var(--bt-weight-semibold);
+  line-height: var(--bt-lh-13);
+}
+
+.body {
+  margin-top: var(--bt-space-1);
+  font-size: var(--bt-text-12);
+  line-height: var(--bt-lh-12);
+  color: var(--bt-text-secondary);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bt-space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bt-space-2);
+  padding: var(--bt-space-4);
+  border-radius: var(--bt-radius-sm);
+  background: var(--bt-surface-1);
+  border: 1px solid var(--bt-border-subtle);
+}
+
+.fieldName {
+  font-size: var(--bt-text-11);
+  line-height: var(--bt-lh-11);
+  text-transform: uppercase;
+  letter-spacing: var(--bt-tracking-wide);
+  font-weight: var(--bt-weight-semibold);
+  color: var(--bt-text-tertiary);
+}
+
+.side {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: var(--bt-space-4);
+  align-items: baseline;
+  font-size: var(--bt-text-12);
+  line-height: var(--bt-lh-13);
+}
+
+.sideLabel {
+  color: var(--bt-text-tertiary);
+  font-weight: var(--bt-weight-medium);
+}
+
+.sideValue {
+  color: var(--bt-text-primary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.sideEmpty {
+  color: var(--bt-text-quaternary);
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  gap: var(--bt-space-4);
+  flex-wrap: wrap;
+}
+
+.detectedAt {
+  font-size: var(--bt-text-11);
+  line-height: var(--bt-lh-11);
+  color: var(--bt-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}

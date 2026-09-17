@@ -1,0 +1,31 @@
+.group {
+  display: inline-flex;
+  gap: var(--bt-space-1);
+  align-items: center;
+  flex: none;
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--bt-space-3);
+  font-family: var(--bt-font-sans);
+  font-size: var(--bt-text-11);
+  line-height: var(--bt-lh-11);
+  font-weight: var(--bt-weight-medium);
+  color: var(--bt-text-secondary);
+  background: var(--bt-surface-3);
+  border: 0.5px solid var(--bt-border);
+  border-radius: var(--bt-radius-xs);
+  box-shadow: var(--bt-shadow-xs);
+  white-space: nowrap;
+}
+
+.muted .key {
+  color: var(--bt-text-tertiary);
+  background: transparent;
+  box-shadow: none;
+}

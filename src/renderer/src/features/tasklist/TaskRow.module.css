@@ -1,0 +1,85 @@
+.row {
+  display: flex; align-items: center; gap: var(--bt-space-4);
+  height: var(--bt-row-h, var(--bt-row-h-default));
+  padding: 0 var(--bt-space-4) 0 var(--bt-space-3);
+  border-radius: var(--bt-radius-sm);
+  position: relative; cursor: default; width: 100%;
+  color: var(--bt-text-primary); font-size: var(--bt-text-13);
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out);
+}
+.row:hover { background: var(--bt-surface-2); }
+.rowSelected, .rowSelected:hover { background: var(--bt-surface-selected); }
+.rowFocusedSelected, .rowFocusedSelected:hover { background: var(--bt-surface-selected-focus); }
+.rowCompleted .title { color: var(--bt-text-quaternary); text-decoration: line-through; }
+.rowDragging { opacity: 0.4; }
+
+.depth1 { padding-left: calc(var(--bt-row-indent, 24px) + var(--bt-space-3)); }
+.guide {
+  position: absolute; left: calc(var(--bt-space-3) + 9px); top: 0; bottom: 0;
+  width: 1px; background: var(--bt-border);
+}
+
+.disclosure {
+  position: absolute; left: -2px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; display: grid; place-items: center;
+  color: var(--bt-text-quaternary); border-radius: var(--bt-radius-xs);
+  opacity: 0; transition: opacity var(--bt-dur-fast) var(--bt-ease-out);
+}
+.row:hover .disclosure, .disclosureOpen, .disclosure:focus-visible { opacity: 1; }
+.disclosureChevron { transition: transform var(--bt-dur-fast) var(--bt-ease-out); }
+.disclosureCollapsed .disclosureChevron { transform: rotate(-90deg); }
+
+/* Checkbox ------------------------------------------------------------- */
+.checkHit {
+  width: 28px; height: 28px; flex: none;
+  display: grid; place-items: center; border-radius: var(--bt-radius-full);
+  margin-left: -6px;
+}
+.checkHit:hover { background: var(--bt-surface-3); }
+.checkbox {
+  width: 16px; height: 16px; border-radius: var(--bt-radius-full);
+  border: 1.5px solid var(--bt-border-strong);
+  display: grid; place-items: center; color: var(--bt-text-on-accent);
+  transition: background-color var(--bt-dur-fast) var(--bt-ease-out), border-color var(--bt-dur-fast) var(--bt-ease-out), transform var(--bt-dur-base) var(--bt-ease-spring);
+}
+.checkHit:hover .checkbox { border-color: var(--bt-accent); }
+.checkboxOn { background: var(--bt-accent); border-color: var(--bt-accent); transform: scale(1.06); }
+.checkP1 { border-color: var(--bt-danger); }
+.checkMark { stroke-dasharray: 14; stroke-dashoffset: 14; }
+.checkboxOn .checkMark { animation: draw-check 220ms var(--bt-ease-out) forwards; }
+
+@keyframes draw-check { to { stroke-dashoffset: 0; } }
+
+/* Title ---------------------------------------------------------------- */
+.title {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: left;
+}
+.titleInput {
+  flex: 1; min-width: 0; height: calc(var(--bt-row-h, 36px) - 8px);
+  background: var(--bt-surface-1); color: var(--bt-text-primary);
+  border: 1px solid var(--bt-accent); border-radius: var(--bt-radius-xs);
+  padding: 0 var(--bt-space-3); font-size: var(--bt-text-13); outline: none;
+}
+
+/* Metadata ------------------------------------------------------------- */
+.meta { display: flex; align-items: center; gap: var(--bt-space-4); flex: none; color: var(--bt-text-tertiary); font-size: var(--bt-text-12); }
+.due { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dueOverdue { color: var(--bt-overdue); font-weight: var(--bt-weight-medium); }
+.dueToday { color: var(--bt-accent-text); }
+.listName {
+  display: inline-flex; align-items: center; gap: var(--bt-space-2);
+  max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--bt-text-quaternary);
+}
+.listDot { width: 7px; height: 7px; border-radius: var(--bt-radius-full); flex: none; }
+.subCount { font-variant-numeric: tabular-nums; color: var(--bt-text-quaternary); }
+.priority { font-weight: var(--bt-weight-bold); letter-spacing: -1px; }
+.priority1 { color: var(--bt-danger); }
+.priority2 { color: var(--bt-warning); }
+.priority3 { color: var(--bt-text-tertiary); }
+.flag { color: var(--bt-warning); display: inline-flex; }
+.noteMark { color: var(--bt-text-quaternary); display: inline-flex; }
+.syncGlyph { display: inline-flex; color: var(--bt-text-quaternary); }
+.syncFailed { color: var(--bt-danger); }
+.syncConflict { color: var(--bt-warning); }

@@ -6,7 +6,16 @@ import type { ViewId } from '@shared/constants';
 import { todayCivil, type CivilDate } from '@shared/date/civil';
 import { call, onMainEvent } from '../lib/ipc';
 
-export type OverlayKind = 'palette' | 'shortcuts' | 'settings' | 'outbox' | 'onboarding' | 'github-picker' | 'list-picker' | 'date-picker' | null;
+export type OverlayKind = 'palette' | 'shortcuts' | 'settings' | 'outbox' | 'onboarding' | 'github-picker' | 'list-picker' | 'date-picker' | 'time-picker' | null;
+
+/** GitHub smart-view filter pills (GitHub track). */
+export type GithubFilter = 'all' | 'issues' | 'prs' | 'failing';
+
+/** Where the inline quick-add row is currently open (Interactions track). */
+export interface InlineAddTarget {
+  listId: string | null;
+  parentId: string | null;
+}
 
 export interface Toast {
   id: string;
@@ -41,8 +50,13 @@ export interface State {
   anchorId: string | null;
   focusId: string | null;
   editingId: string | null;
+  /** Inline "new task" row target, or null when closed. */
+  inlineAddFor: InlineAddTarget | null;
+  /** List whose sidebar row is in rename mode. */
+  renamingListId: string | null;
   dragging: boolean;
   filterQuery: string;
+  githubFilter: GithubFilter;
   overlay: OverlayKind;
   overlayPayload: unknown;
   sidebarWidth: number;
@@ -68,8 +82,11 @@ export interface Actions {
   select: (ids: string[], anchorId?: string | null) => void;
   setFocus: (id: string | null) => void;
   setEditing: (id: string | null) => void;
+  setInlineAddFor: (t: InlineAddTarget | null) => void;
+  setRenamingListId: (id: string | null) => void;
   setDragging: (d: boolean) => void;
   setFilter: (q: string) => void;
+  setGithubFilter: (f: GithubFilter) => void;
   openOverlay: (k: OverlayKind, payload?: unknown) => void;
   closeOverlay: () => void;
   setUi: (patch: Partial<Pick<State, 'sidebarWidth' | 'sidebarUserCollapsed' | 'sidebarAutoCollapsed' | 'detailWidth' | 'inspectorOpen' | 'density'>>) => void;
@@ -175,8 +192,11 @@ export const useStore = create<Store>()(
       anchorId: null,
       focusId: null,
       editingId: null,
+      inlineAddFor: null,
+      renamingListId: null,
       dragging: false,
       filterQuery: '',
+      githubFilter: 'all',
       overlay: null,
       overlayPayload: null,
       sidebarWidth: ui.sidebarWidth ?? 248,
@@ -240,10 +260,12 @@ export const useStore = create<Store>()(
         if (t !== get().today) set({ today: t });
       },
 
-      setView(view) { set({ view, selection: [], anchorId: null, focusId: null, editingId: null, filterQuery: '' }); },
+      setView(view) { set({ view, selection: [], anchorId: null, focusId: null, editingId: null, inlineAddFor: null, filterQuery: '' }); },
       select(ids, anchorId) { set({ selection: ids, anchorId: anchorId === undefined ? (ids[0] ?? null) : anchorId, focusId: ids[ids.length - 1] ?? get().focusId }); },
       setFocus(focusId) { set({ focusId }); },
       setEditing(editingId) { set({ editingId }); },
+      setInlineAddFor(inlineAddFor) { set({ inlineAddFor }); },
+      setRenamingListId(renamingListId) { set({ renamingListId }); },
       setDragging(dragging) {
         set({ dragging });
         if (!dragging) {
@@ -253,6 +275,7 @@ export const useStore = create<Store>()(
         }
       },
       setFilter(filterQuery) { set({ filterQuery }); },
+      setGithubFilter(githubFilter) { set({ githubFilter }); },
       openOverlay(overlay, overlayPayload = null) { set({ overlay, overlayPayload }); },
       closeOverlay() { set({ overlay: null, overlayPayload: null }); },
       setUi(patch) { set(patch); },

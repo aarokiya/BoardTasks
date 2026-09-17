@@ -1,0 +1,36 @@
+.hud {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bt-space-2);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--bt-space-5) var(--bt-space-7);
+  background: var(--bt-surface-1);
+  border: 0.5px solid var(--bt-border);
+  border-radius: var(--bt-radius-xl);
+  box-shadow: var(--bt-shadow-xl);
+  -webkit-app-region: drag;
+}
+
+.hud :where(input, button, [role="dialog"], [role="menu"]) {
+  -webkit-app-region: no-drag;
+}
+
+/* The one place vibrancy earns its keep — unless the user asked for less. */
+@supports (backdrop-filter: blur(1px)) {
+  .hud { background: color-mix(in srgb, var(--bt-surface-1) 78%, transparent); backdrop-filter: blur(20px); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .hud { background: var(--bt-surface-1); backdrop-filter: none; }
+}
+
+.flash {
+  font-size: var(--bt-text-12);
+  color: var(--bt-success);
+}
+
+.error {
+  font-size: var(--bt-text-12);
+  color: var(--bt-danger);
+}
