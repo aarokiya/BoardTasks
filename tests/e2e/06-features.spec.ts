@@ -791,20 +791,13 @@ test.describe('settings', () => {
     await expect.poll(() => app.evaluate(({ app: a }) => a.dock?.getBadge() ?? '')).toBe('');
   });
 
-  /**
-   * KNOWN DEFECT (documented, not hidden): the Settings ▸ Sync ▸ "Sync interval"
-   * control writes `syncIntervalSec` and nothing reads it — the scheduler always
-   * uses DEFAULT_INTERVALS (src/main/sync/scheduler.ts:24-30, never overridden
-   * from startSync in src/main/sync/index.ts:50-61). `test.fail()` keeps the
-   * suite honest: this flips to a hard failure the day it is fixed.
-   */
-  test.fail('the sync interval setting is honoured by the poll scheduler', async ({ win }) => {
-    await ipc(win, 'settings:set', { syncIntervalSec: 30 });
-    expect((await ipc<SettingsShape>(win, 'settings:getAll')).syncIntervalSec).toBe(30);
-    // The scheduler logs the interval it armed; with the setting wired, 30s
-    // would appear. It never does.
-    const seen = await win.evaluate(() => 'not-observable-from-the-renderer');
-    expect(seen).toBe('30');
+  test('the sync interval setting is honoured by the poll scheduler', async ({ win }) => {
+    await ipc(win, 'settings:set', { syncIntervalSec: 15 });
+    const before = (await ipc<{ lastSyncSucceededAt: string | null }>(win, 'sync:getState')).lastSyncSucceededAt;
+    // No click, no edit: only the poll can move this, and only if it re-armed at 15s.
+    await expect
+      .poll(async () => (await ipc<{ lastSyncSucceededAt: string | null }>(win, 'sync:getState')).lastSyncSucceededAt, { timeout: 25_000 })
+      .not.toBe(before);
   });
 
   test('the View menu Show/Hide Completed checkbox reflects the global setting', async ({ win, app }) => {

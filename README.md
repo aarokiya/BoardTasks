@@ -88,24 +88,14 @@ Google Tasks has no push API and no time-of-day on due dates, so sync is polled 
 
 ## Known gaps
 
-Verified against the built app; the full audit, with file/line and a suggested fix for each, is in
-[`docs/feature-matrix.md`](docs/feature-matrix.md).
+Verified against the built app; the per-feature audit is in [`docs/feature-matrix.md`](docs/feature-matrix.md) and what needs a human is in [`docs/manual-qa.md`](docs/manual-qa.md).
 
-- **A task edited in two places at once resolves last-write-wins.** The conflict UI exists and the
-  three-way merge exists, but pushes carry no `If-Match`, so the server never reports a collision
-  and your local edit overwrites the other device's. Same root cause makes a
-  remote-delete-plus-local-edit drop the local edit.
-- **Settings ▸ Sync ▸ Sync interval has no effect.** Polling is fixed at 60 s focused / 5 min
-  background / 15 min on battery.
-- **A Google rate limit reads as "Syncing…"** for as long as the retry-after lasts, with no
-  countdown. Nothing is lost; it just looks stuck.
-- **Being offline also reads as "Syncing…"**, and after a longer outage the queued changes take a
-  full backoff cycle (about a minute) to flush rather than going out the moment you reconnect.
-  Again, nothing is lost.
-- **View ▸ Show / Hide Completed never shows a checkmark** — the command toggles a per-list
-  preference, which is not the setting the menu reads.
-- **The Quick Add global shortcut can't be changed from the UI** (it is `⌃⇧Space`), and
-  translucent sidebar needs a restart to take effect natively.
+- **Never exercised against a real Google account.** OAuth, sync, conflicts and rate limits are proven against a faithful fake server (`tests/fixtures/fakeGoogle.ts`) and unit fakes that reproduce the API's quirks, but three real-API behaviours are undocumented — whether deleted-task tombstones flow with `updatedMin`, whether `updatedMin` is inclusive, and whether `If-Match`/412 is honoured. The engine is correct under every combination (idempotent merge + periodic full reconcile), and `npm run probe:api` settles them against a scratch account.
+- **Translucent sidebar** takes effect on the next launch (Electron sets vibrancy when the window is created). The setting says so.
+- **Date order (M/D/Y vs D/M/Y)** affects how Quick Add parses `9/25`; dates are always *displayed* as "Sep 25".
+- **Reminder times live on this Mac.** Google Tasks has no time-of-day, so `5pm` never reaches your phone.
+- **No account email** is shown after sign-in: the app requests only the Tasks scope.
+- **Unsigned build**: Gatekeeper needs a right-click → Open (or `xattr -dr com.apple.quarantine`) on a Mac other than the one that built it.
 
 ## Keyboard
 

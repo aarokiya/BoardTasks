@@ -5,14 +5,30 @@ truth for the UI; the renderer never waits on the network. Everything here runs
 in the main process.
 
 ```
-scheduler ──▶ engine.runCycle ──▶ push (drain outbox) ──▶ pull (merge)
-                   │                     │                    │
-                   └── SyncState ────────┴── data:changed ────┘
+scheduler ──▶ engine.runCycle ──▶ pre-pull ──▶ push ──▶ pull (merge)
+                   │             (conflicts)  (outbox)      │
+                   └── SyncState ─────────────┴─ data:changed┘
 ```
 
-A cycle is always **push then pull**: the user's own changes should reach Google
-before we merge anything from it, so a local edit is never overwritten by the
-stale copy the server still holds.
+A cycle is **pre-pull → push → pull**.
+
+*Push before pull* is the ordering that matters for the user's own work: their
+changes reach Google before we merge anything from it, so a local edit is never
+overwritten by the stale copy the server still holds.
+
+*The pre-pull exists because push-then-pull is blind to conflicts.* The push's
+own staleness check compares the row's `updated_at` against the entry's
+`base_updated_at` — both written by the **same** pull — so an edit another
+device made since then is invisible to it, and the push silently overwrites it.
+So before pushing, `runPrePull` incrementally pulls the lists that hold queued
+work for tasks Google already knows about (`listsWithPendingRemoteTasks()`).
+That cannot lose a local edit: the merge is per-field and dirty-aware, so a
+field the user touched is either kept or raised as a conflict.
+
+It costs nothing in the common case — nothing queued, or only creates, and the
+query returns no lists and no request is made. A list that fails to pull is
+reported as **unverified** rather than throwing: the rest of the outbox still
+drains, and only already-synced tasks in that list are held back.
 
 ---
 
@@ -25,7 +41,7 @@ Every user mutation writes the row **and** an outbox entry in one transaction
 |---|---|
 | `pending` | Ready to send once `next_attempt_at` has passed. |
 | `inflight` | Handed to the request queue. Reset to `pending` on startup — a crash leaves nothing actually in flight. |
-| `blocked` | Not ready: something it references has no remote id yet. **Not a failure.** |
+| `blocked` | Held, not failed. Either something it references has no remote id yet, or the task carries an unresolved conflict, or its list could not be conflict-checked this cycle. **Never burns `attempts`.** |
 | `parked` | Stopped. Surfaced to the user with Retry / Discard. **Never auto-deleted.** |
 | `done` | Sent, or cancelled because it became meaningless. Vacuumed after 7 days. |
 
@@ -39,7 +55,15 @@ land out of order.
 An entry is **ready** iff every local id it references resolves to a remote id:
 the entity itself, its list, `parentId`, and `destListId`. Otherwise it is
 `blocked`: `blocked_passes++`, `attempts` **untouched**, and after 3 passes it
-parks with `dependency_failed`.
+parks with `DEPENDENCY_FAILED`.
+
+Two other holds share the status but **not** the pass counter, so they can wait
+indefinitely without ever parking:
+
+- the task carries an unresolved **conflict** (`CONFLICT`) — the whole point of
+  raising one is that the user, not the client, picks the winner;
+- its list was **unverified** this cycle (`NETWORK`) — we could not check Google
+  for newer changes, so we do not overwrite blind.
 
 Causality is already encoded by construction — you cannot update a task before
 creating it — so FIFO plus a readiness check is sufficient; a topological sort
@@ -52,12 +76,21 @@ would be absurd.
 
 ### Failure disposition
 
-| Cause | Result |
-|---|---|
-| 5xx / 408 / transport | `attempts++`, `next_attempt_at = now + nextDelay()`, park at 8 attempts |
-| 429 / 403-rate-limit | Exact `Retry-After`; **`attempts` untouched** and the drain stops |
-| 400 / real 403 / 404 | Parked immediately — retrying eight times proves nothing |
-| `AuthError` | Entry stays `pending`, drain aborts, engine pauses. The outbox is **never** cleared on re-auth |
+Every failure lands on one of a **closed set** of codes (`OutboxErrorCode` in
+`backoff.ts`), because the "Changes that didn't sync" sheet maps them to human
+sentences — an ad-hoc `http_400` reaches the user as a raw string.
+
+| Cause | Code | Result |
+|---|---|---|
+| 5xx / 408 / unknown throw | `INTERNAL` | `attempts++`, `next_attempt_at = now + nextDelay()`, park at 8 attempts |
+| transport / timeout | `NETWORK` | as above (the timeout detail lives in the message, not the code) |
+| 429 / 403-rate-limit | `RATE_LIMITED` | Exact `Retry-After`; **`attempts` untouched** and the drain stops |
+| 400 | `VALIDATION` | Parked immediately — retrying eight times proves nothing |
+| real 403 (`insufficient_scope`) | `FORBIDDEN` | Parked immediately |
+| 404 | `NOT_FOUND` | Parked immediately |
+| 409 / **412** | `CONFLICT` | Re-queued at once, `attempts++` as a loop bound. The next cycle's pre-pull merges the server's copy and the entry is re-derived from what is still dirty |
+| unmet dependency | `DEPENDENCY_FAILED` | `blocked`, then parked after 3 passes |
+| `AuthError` | `AUTH` | Entry stays `pending`, drain aborts, engine pauses. The outbox is **never** cleared on re-auth |
 
 Backoff is exponential with jitter in `[exp/2, exp)`, base 1s, cap 5min. Jitter
 is not decoration: a laptop waking with 200 queued entries would otherwise retry
@@ -88,6 +121,11 @@ that exists on Google and nowhere on this machine.
 Per list: `updatedMin` = watermark − 2 min, all four `show*` flags explicit,
 `maxResults=100`, paginated. Each page is merged as it arrives (the merge is
 idempotent, so a partial pull still leaves the store correct).
+
+Pagination stops at `MAX_PAGES`. A listing truncated there does **not** advance
+the watermark and does **not** run the key-set diff: the first would lose
+everything past the cap forever, and the second would read "not seen" as
+"deleted on the server" and hard-delete it.
 
 ### Watermark rule
 
@@ -121,14 +159,6 @@ list (case-insensitive, trimmed) is **bound** to it and the create is cancelled
 
 ## Merge policy
 
-> **Implementation status (verified 2026-09-17):** the policy below is what the
-> merge code implements, but in practice it is **not reached for a both-sides
-> edit**. `runPush` runs before `runPull` (`src/main/sync/engine.ts:181-187`) and
-> `src/main/sync/push.ts:325` sends no `If-Match`, so the local edit is pushed
-> blind and the pull then sees only our own write. Last-write-wins is the actual
-> behaviour today. See [`feature-matrix.md`](feature-matrix.md) F1/F2 for the
-> measurements and the suggested fix.
-
 Three-way, per field, over `base_json` (last-known server state) + `dirty_fields`
 (what the user changed since that base).
 
@@ -151,6 +181,14 @@ Deletions:
   `remoteDeleted` conflict offering Restore (which creates a *new* task, since
   the Google id is gone; the stable `localId` keeps editors and selection intact).
 
+While a conflict is unresolved the outbox entry for that task is **held**, so
+Google keeps its value until the user decides. `tasks:resolveConflict` clears
+the conflict and releases the entry: `keepLocal` re-derives the body from what
+is still dirty and pushes it, `useServer` adopts the server's fields (including
+a cleared `due`, which drops the local-only `dueTime`) and cancels the entry —
+or, when the server deleted the task, accepts the deletion rather than leaving a
+row pointing at a dead Google id.
+
 A pull that brings back identical state writes nothing and reports no change —
 otherwise every 60s tick would re-arm the tray badge and the whole reminder
 schedule for nothing.
@@ -167,7 +205,7 @@ already been optimistically updated by the time the entry runs.
 |---|---|
 | Do tombstones flow with `updatedMin`? | The pull is an idempotent **merge**, not a delta application, and the full reconcile catches deletes either way. The whole pull suite runs under **both** settings (`describe.each`). |
 | Is `updatedMin` inclusive? | The 2-minute read-back skew makes it irrelevant; re-merging an item is a no-op. |
-| Is `If-Match` / 412 honoured? | *Designed as:* sent when an etag is known, and a 412 classified as a conflict and re-pulled. **Not currently wired** — `push.ts:325` omits the etag argument, so no request ever carries `If-Match` and the 412 branch in `http-client.ts:176` is dead. |
+| Is `If-Match` / 412 honoured? | `task.update` sends the etag of the **last server state we merged** (the row's current etag, never the outbox entry's `base_etag`, which goes stale on a retry and would 412 forever). A 412 is classified as a conflict, re-queued and resolved by the next cycle's pre-pull. This is the **second** line of defence: if Google ignores the header nothing is lost, because the pre-pull already caught the conflict. |
 | The real rate limit | AIMD converges on it: halve the token-bucket refill on a 429, recover 10% every 30s. |
 | `showHidden` default | Never relied on — all four `show*` flags are always explicit. |
 
@@ -180,16 +218,72 @@ every 403 as "signed out" logs users out under load.
 ## Scheduling and network
 
 Triggers: startup, interval, window focus, network regain, power resume,
-local edit (800ms debounce, 5s max wait), manual, post-auth. Intervals: 60s
-focused / 5min background / 15min on battery. One cycle at a time; a trigger
-arriving mid-cycle sets a resync flag. Everything pauses while auth is not
-`signed_in` and resumes immediately on sign-in.
+local edit (800ms debounce, 5s max wait), backoff retry, manual, post-auth. One
+cycle at a time; a trigger arriving mid-cycle sets a resync flag — and
+`manual()` resolves when **that** follow-up cycle ends, never when the stale one
+it interrupted does. Everything pauses while auth is not `signed_in` and resumes
+immediately on sign-in.
+
+### Cadence
+
+The poll interval comes from the user's `syncIntervalSec` setting through
+`intervalsFromSetting()`, applied live via `onSettingsChanged` (a pending poll
+is re-armed, so the control is not inert):
+
+| State | Interval |
+|---|---|
+| focused | `sec` |
+| background | `max(5 × sec, 300s)` |
+| battery | `max(15 × sec, 900s)` |
+
+Only the focused rhythm follows the setting literally. A background or battery
+cadence that honoured "every 15 seconds" would drain a laptop for no benefit, so
+those are multiples with a floor. The default (60s) reproduces 60s / 5min /
+15min.
+
+`schedulePoll` also respects a **floor** the engine supplies — the remaining
+`Retry-After` — so a throttled account is not re-asked on the ordinary rhythm.
+A manual sync bypasses the floor; the throttled *entry* still keeps its own
+`next_attempt_at`, because re-asking the instant Google told us to wait is how a
+burst limit becomes a long one.
+
+### Rate limits
+
+`Retry-After` is split by length. The HTTP wrapper absorbs only a blink
+(`MAX_INLINE_RETRY_MS`, 2s); anything longer is thrown to the caller. A
+`sleep(60_000)` inside the request holds the whole cycle open, so the status pill
+reads "Syncing…" for a minute and the countdown is never computed. Thrown
+instead, the engine sets `rateLimitedUntil`, reports `status: 'rate_limited'`
+with a live `retryAfterMs`, skips the pull (throttling is account-wide, so
+pulling would only collect more 429s) and parks the next poll on the floor
+above. A daily quota does not clear in five minutes: it waits
+`DAILY_RETRY_AFTER_MS` (1h) and carries an explanatory `errorMessage`.
+
+### Network
 
 `net.isOnline()` is a **negative** signal only; real request outcomes are the
-authoritative positive signal; transitions trigger a `HEAD` probe of a known
-204 endpoint with `redirect: 'manual'`, where an unexpected redirect to a
-foreign host means a captive portal. Suspend forces offline at once (requests
-on a sleeping NIC hang for minutes); resume re-probes after 3s.
+authoritative positive signal. The probe is a `HEAD` of the **API base URL**
+with `redirect: 'manual'` and a 5s timeout — the host we actually need, not a
+third-party "generate 204" a firewall or a CI sandbox can black-hole while
+Google is fine. **Any** HTTP answer proves the route (a HEAD of the collection
+root is a 401 or 404 on a healthy Google); a redirect to a **foreign** host is a
+captive portal; only a transport error is offline.
+
+While offline or behind a portal the monitor re-probes on a ladder — 3s, 6s,
+12s, 30s, then every 60s while there is queued work or a focused window, else
+every 5 minutes — each delay jittered ±15% through the injected `Random`. The
+ladder resets on any status change and on resume. Without it the only way back
+is a request the scheduler will not make until its next poll, so a laptop that
+reconnects sits on a full outbox for minutes.
+
+Electron's `net` emits no online/offline events, so the same timer polls
+`net.isOnline()`. When it reads `false` no request is made at all — there is
+provably no route — and the poll is capped at 60s even when idle, because that
+path costs only a local call and is how the flip back is noticed.
+
+Coming back online triggers a cycle immediately, not merely a re-armed poll.
+Suspend forces offline at once and cancels the ladder (requests on a sleeping
+NIC hang for minutes); resume starts a fresh ladder and re-probes after 3s.
 
 ---
 

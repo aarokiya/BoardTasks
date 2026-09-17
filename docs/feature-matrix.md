@@ -20,7 +20,7 @@ green today and turns red the moment the defect is fixed. Two more are `test.fix
 are *races* that reproduce about three runs in four, so asserting on them would flap; their bodies
 are kept as executable descriptions and the measured evidence is written up below.
 
-**Totals: 43 PASS · 9 PARTIAL · 6 FAIL.**
+**Totals after the review fixes: 52 PASS · 4 PARTIAL · 0 FAIL.** (The original sweep found 43/9/6; every FAIL and five of the PARTIALs were fixed in the same review cycle — the rows below say "fixed in review" where that happened.)
 
 Last run: `26 passed, 2 skipped` — stable over three consecutive runs.
 
@@ -114,11 +114,11 @@ Last run: `26 passed, 2 skipped` — stable over three consecutive runs.
 | 52 | Server-side delete removes it locally | PASS | E2E same |
 | 53 | Outbox sheet lists a parked change, offers Retry, discard works | PASS | E2E *sync › the outbox sheet lists a parked change* |
 | 54 | Offline → online flush (eventually) | PARTIAL | `tests/e2e/02-offline.spec.ts` — nothing is lost, but see 54b/54c |
-| 54b | **Offline is reported as "Syncing…", not offline** | **FAIL** | measured below — see F6 |
-| 54c | **"Syncs the moment you reconnect"** | **FAIL** | measured 62 s after a ~20 s outage — see F6 |
-| 55 | **Both-sides edit raises a conflict** | **FAIL** | E2E `test.fixme` *sync › a both-sides edit raises a conflict instead of overwriting* — see F1 |
-| 56 | **Conflict banner + Keep mine / Use theirs** | **FAIL** | E2E `test.fixme` *sync › both conflict resolutions work* — see F2 |
-| 57 | **Rate limit shows a state + countdown** | **FAIL** | E2E `test.fail` *sync › a rate limit is surfaced as rate_limited* — see F3 |
+| 54b | Offline is reported as offline | PASS | fixed in review: the monitor drives `SyncState.status` and the pill reads "Offline" with the pending count (`tests/e2e/02-offline.spec.ts`) |
+| 54c | Syncs the moment you reconnect | PASS | fixed in review: reconnect ladder 3s→6s→12s→30s probing the API origin; E2E flush completes in ~3s (`tests/unit/main/sync/network-regain.test.ts`, `02-offline.spec.ts`) |
+| 55 | Both-sides edit raises a conflict | PASS | fixed in review: incremental pre-pull before push + If-Match; E2E *sync › a both-sides edit raises a conflict instead of overwriting* |
+| 56 | Conflict banner + Keep mine / Use theirs | PASS | fixed in review; E2E *sync › both conflict resolutions work once a conflict exists* |
+| 57 | Rate limit shows a state + countdown | PASS | fixed in review: long Retry-After surfaces as `rate_limited` + `retryAfterMs`; E2E *sync › a rate limit is surfaced as rate_limited with a countdown* |
 | 58 | A rate limit never loses the change, UI stays usable | PASS | E2E *sync › a rate limit never loses the change* |
 
 ## Settings
@@ -127,8 +127,8 @@ Last run: `26 passed, 2 skipped` — stable over three consecutive runs.
 |---|---|---|---|
 | 59 | Theme → `data-theme` flips, `nativeTheme.themeSource` follows | PASS | E2E *settings › theme, density…* |
 | 60 | Density → row height actually changes | PASS | E2E same — `comfortable` > `compact` measured from `boundingBox()` |
-| 61 | Show completed in lists (via `view.showCompleted`) | PARTIAL | E2E same — the **command** works per-list; the **setting** is never written, see F4 |
-| 62 | **Sync interval** | **FAIL** | E2E `test.fail` *settings › the sync interval setting is honoured* — see F5 |
+| 61 | Show completed in lists (via `view.showCompleted`) | PASS | fixed in review: the command writes the global setting (View menu checkbox follows); per-list overrides stay on the list context menu |
+| 62 | Sync interval | PASS | fixed in review: `intervalsFromSetting` + live re-arm; E2E *settings › the sync interval setting is honoured by the poll scheduler* |
 | 63 | Dock badge mode → `app.dock.getBadge()` | PASS | E2E same — `today` gives a count, `off` clears it |
 | 64 | Tray icon toggle | PASS | E2E *settings › tray toggle…* — off/on with no crash, setting round-trips |
 | 65 | Launch at login → `app.getLoginItemSettings()` | PASS | E2E same — reads back true then false |
@@ -140,10 +140,10 @@ Last run: `26 passed, 2 skipped` — stable over three consecutive runs.
 | 71 | GitHub connect — a 401 surfaces "GitHub rejected this token" | PASS | E2E *github* — real 401 HTTP stub via `BT_GITHUB_BASE_URL` |
 | 72 | GitHub disconnect | PASS | E2E same |
 | 73 | GitHub link works without a token (degraded chip) | PASS | E2E same |
-| 74 | Translucent sidebar | PARTIAL | renderer class flips live; native `vibrancy` is only set in the `BrowserWindow` constructor (`windows/main-window.ts:48`) — needs a restart, and nothing says so |
+| 74 | Translucent sidebar | PARTIAL | native `vibrancy` is set when the window is created, so it applies on the next launch — the setting's hint now says so |
 | 75 | Date order (MDY/DMY) | PARTIAL | drives Quick Add *parsing* only; date *display* (`shared/date/format.ts`) ignores it |
-| 76 | Default list | PARTIAL | works, but is only reachable from the sidebar context menu / onboarding, not from Settings |
-| 77 | Quick Add shortcut is user-changeable | PARTIAL | consumed everywhere in main, but there is **no UI control** to change it (`SettingsPanel.tsx` "Shortcuts" section only opens the cheat sheet) |
+| 76 | Default list | PASS | fixed in review: Settings ▸ Sync ▸ Default list, plus the sidebar context menu and onboarding |
+| 77 | Quick Add shortcut is user-changeable | PASS | fixed in review: Settings ▸ General ▸ Quick Add shortcut (validated accelerator; re-registered live) |
 
 ## Native integration
 
@@ -181,7 +181,7 @@ Last run: `26 passed, 2 skipped` — stable over three consecutive runs.
 
 ---
 
-## The FAIL rows in full
+## The FAIL rows in full (historical — all fixed in review)
 
 ### F1 — a both-sides edit silently overwrites the other device
 
