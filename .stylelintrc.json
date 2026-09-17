@@ -1,0 +1,32 @@
+{
+  "extends": "stylelint-config-standard",
+  "rules": {
+    "selector-class-pattern": null,
+    "custom-property-pattern": "^bt-[a-z0-9-]+$",
+    "color-hex-length": null,
+    "alpha-value-notation": null,
+    "color-function-notation": null,
+    "property-no-vendor-prefix": null,
+    "value-keyword-case": null,
+    "declaration-block-no-redundant-longhand-properties": null,
+    "no-descending-specificity": null,
+    "media-feature-range-notation": null,
+    "color-function-alias-notation": null,
+    "declaration-block-single-line-max-declarations": null,
+    "rule-empty-line-before": null,
+    "comment-empty-line-before": null,
+    "declaration-empty-line-before": null,
+    "custom-property-empty-line-before": null,
+    "selector-not-notation": null,
+    "shorthand-property-no-redundant-values": null,
+    "length-zero-no-unit": null,
+    "number-max-precision": null,
+    "font-family-name-quotes": null,
+    "declaration-property-value-disallowed-list": {
+      "/^(color|background-color|border-color|border|outline-color|fill|stroke)$/": ["/^#[0-9a-fA-F]{3,8}$/", "/^rgba?\\(/", "/^hsla?\\(/"]
+    }
+  },
+  "overrides": [
+    { "files": ["src/renderer/src/styles/tokens.css"], "rules": { "declaration-property-value-disallowed-list": null } }
+  ]
+}

@@ -1,0 +1,142 @@
+/* BoardTasks design tokens. Light is the default; dark overrides under [data-theme="dark"].
+   The renderer ALWAYS writes an explicit data-theme, so the media query is only a pre-JS safety net. */
+:root {
+  --bt-space-1: 2px; --bt-space-2: 4px; --bt-space-3: 6px; --bt-space-4: 8px; --bt-space-5: 12px;
+  --bt-space-6: 16px; --bt-space-7: 20px; --bt-space-8: 24px; --bt-space-9: 32px; --bt-space-10: 40px;
+  --bt-space-11: 48px; --bt-space-12: 64px;
+
+  --bt-radius-xs: 4px; --bt-radius-sm: 6px; --bt-radius-md: 8px; --bt-radius-lg: 10px; --bt-radius-xl: 14px; --bt-radius-full: 999px;
+
+  --bt-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --bt-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --bt-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  --bt-text-11: 11px; --bt-lh-11: 14px;
+  --bt-text-12: 12px; --bt-lh-12: 16px;
+  --bt-text-13: 13px; --bt-lh-13: 18px;
+  --bt-text-14: 14px; --bt-lh-14: 20px;
+  --bt-text-15: 15px; --bt-lh-15: 22px;
+  --bt-text-17: 17px; --bt-lh-17: 24px;
+  --bt-text-20: 20px; --bt-lh-20: 26px;
+  --bt-text-24: 24px; --bt-lh-24: 30px;
+  --bt-text-28: 28px; --bt-lh-28: 34px;
+
+  --bt-weight-regular: 400; --bt-weight-medium: 500; --bt-weight-semibold: 600; --bt-weight-bold: 700;
+  --bt-tracking-tight: -0.014em; --bt-tracking-normal: -0.006em; --bt-tracking-wide: 0.02em;
+
+  --bt-dur-instant: 80ms; --bt-dur-fast: 120ms; --bt-dur-base: 180ms; --bt-dur-slow: 260ms; --bt-dur-sheet: 320ms;
+  --bt-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --bt-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --bt-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --bt-ease-spring: linear(0, 0.35 9%, 0.78 20%, 1.02 30%, 1.06 39%, 1 55%, 1);
+
+  --bt-z-sticky: 10; --bt-z-dropdown: 100; --bt-z-overlay: 200; --bt-z-modal: 300; --bt-z-toast: 400; --bt-z-tooltip: 500;
+
+  --bt-titlebar-h: 52px;
+  --bt-sidebar-w: 248px; --bt-sidebar-w-min: 180px; --bt-sidebar-w-max: 360px; --bt-rail-w: 48px;
+  --bt-detail-w: 360px; --bt-detail-w-min: 300px; --bt-detail-w-max: 520px;
+  --bt-row-h-compact: 30px; --bt-row-h-default: 36px; --bt-row-h-comfortable: 44px;
+  --bt-traffic-light-gutter: 78px;
+}
+
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  --bt-bg-app: #ececf0;
+  --bt-bg-sidebar: #f2f2f5;
+  --bt-bg-sidebar-alpha: rgba(246, 246, 249, 0.62);
+  --bt-surface-1: #ffffff;
+  --bt-surface-2: #fafafb;
+  --bt-surface-3: #f0f0f3;
+  --bt-surface-4: #e6e6ea;
+  --bt-surface-selected: #e3ecfd;
+  --bt-surface-selected-focus: #d6e4fd;
+  --bt-surface-raised: #ffffff;
+  --bt-scrim: rgba(0, 0, 0, 0.28);
+  --bt-border-subtle: rgba(0, 0, 0, 0.055);
+  --bt-border: rgba(0, 0, 0, 0.1);
+  --bt-border-strong: rgba(0, 0, 0, 0.22);
+  --bt-border-focus: #2f6fed;
+  --bt-text-primary: #16161a;
+  --bt-text-secondary: #55555f;
+  --bt-text-tertiary: #6f6f79;
+  --bt-text-quaternary: #9a9aa4;
+  --bt-text-inverse: #ffffff;
+  --bt-text-on-accent: #ffffff;
+  --bt-accent: #2f6fed;
+  --bt-accent-hover: #2761d9;
+  --bt-accent-active: #1f52bd;
+  --bt-accent-subtle: #e8f0ff;
+  --bt-accent-border: #b9d0ff;
+  --bt-accent-text: #1b4fb8;
+  --bt-success: #1a7f4b; --bt-success-subtle: #e3f5eb;
+  --bt-warning: #9a5b00; --bt-warning-subtle: #fdf0dd;
+  --bt-danger: #c0322a; --bt-danger-subtle: #fdeceb;
+  --bt-overdue: #c0322a; --bt-overdue-subtle: #fdeceb;
+  --bt-info: #2f6fed; --bt-info-subtle: #e8f0ff;
+  --bt-gh-open: #1a7f4b; --bt-gh-open-subtle: #e3f5eb;
+  --bt-gh-closed: #c0322a; --bt-gh-closed-subtle: #fdeceb;
+  --bt-gh-merged: #7b3fd4; --bt-gh-merged-subtle: #f1e9fd;
+  --bt-gh-draft: #5f5f69; --bt-gh-draft-subtle: #eeeef1;
+  --bt-list-gray: #8e8e93; --bt-list-red: #e5484d; --bt-list-orange: #f1862e; --bt-list-yellow: #e2b100;
+  --bt-list-green: #2fb35f; --bt-list-teal: #1fa9b8; --bt-list-blue: #3b82f6; --bt-list-purple: #8b5cf6; --bt-list-pink: #ec4899;
+  --bt-shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.04);
+  --bt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
+  --bt-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --bt-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.07);
+  --bt-shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+  --bt-shadow-drag: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--bt-accent-border);
+  --bt-focus-ring: 0 0 0 2px var(--bt-surface-1), 0 0 0 4px var(--bt-accent);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bt-bg-app: #141417;
+  --bt-bg-sidebar: #1a1a1e;
+  --bt-bg-sidebar-alpha: rgba(28, 28, 32, 0.58);
+  --bt-surface-1: #1e1e23;
+  --bt-surface-2: #252529;
+  --bt-surface-3: #2c2c33;
+  --bt-surface-4: #35353d;
+  --bt-surface-selected: #26334d;
+  --bt-surface-selected-focus: #2e3f61;
+  --bt-surface-raised: #26262c;
+  --bt-scrim: rgba(0, 0, 0, 0.52);
+  --bt-border-subtle: rgba(255, 255, 255, 0.06);
+  --bt-border: rgba(255, 255, 255, 0.11);
+  --bt-border-strong: rgba(255, 255, 255, 0.28);
+  --bt-border-focus: #6d99ff;
+  --bt-text-primary: #ededf2;
+  --bt-text-secondary: #aeaeb9;
+  --bt-text-tertiary: #8b8b96;
+  --bt-text-quaternary: #5e5e68;
+  --bt-text-inverse: #16161a;
+  --bt-text-on-accent: #0e1a33;
+  --bt-accent: #6d99ff;
+  --bt-accent-hover: #85aaff;
+  --bt-accent-active: #5b8aff;
+  --bt-accent-subtle: #1c2740;
+  --bt-accent-border: #33507f;
+  --bt-accent-text: #92b4ff;
+  --bt-success: #46cf8b; --bt-success-subtle: #12291f;
+  --bt-warning: #e5aa4a; --bt-warning-subtle: #2c2314;
+  --bt-danger: #ff7b70; --bt-danger-subtle: #2e1a19;
+  --bt-overdue: #ff7b70; --bt-overdue-subtle: #2e1a19;
+  --bt-info: #6d99ff; --bt-info-subtle: #1c2740;
+  --bt-gh-open: #46cf8b; --bt-gh-open-subtle: #12291f;
+  --bt-gh-closed: #ff7b70; --bt-gh-closed-subtle: #2e1a19;
+  --bt-gh-merged: #b98cff; --bt-gh-merged-subtle: #241b38;
+  --bt-gh-draft: #a4a4ae; --bt-gh-draft-subtle: #242429;
+  --bt-list-gray: #98989d; --bt-list-red: #ff6b6b; --bt-list-orange: #ff9f43; --bt-list-yellow: #f5c518;
+  --bt-list-green: #4ade80; --bt-list-teal: #2dd4bf; --bt-list-blue: #60a5fa; --bt-list-purple: #a78bfa; --bt-list-pink: #f472b6;
+  --bt-shadow-xs: 0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  --bt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  --bt-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  --bt-shadow-lg: 0 14px 38px rgba(0, 0, 0, 0.62), 0 0 0 0.5px rgba(255, 255, 255, 0.09);
+  --bt-shadow-xl: 0 28px 72px rgba(0, 0, 0, 0.7), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  --bt-shadow-drag: 0 10px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--bt-accent-border);
+  --bt-focus-ring: 0 0 0 2px var(--bt-surface-1), 0 0 0 4px var(--bt-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) { color-scheme: dark; background: #141417; color: #ededf2; }
+}

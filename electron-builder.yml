@@ -1,0 +1,56 @@
+appId: app.boardtasks.desktop
+productName: BoardTasks
+copyright: Copyright © 2026 BoardTasks
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+
+asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+# better-sqlite3 ships N-API prebuilds; never run node-gyp.
+npmRebuild: false
+buildDependenciesFromSource: false
+
+extraResources:
+  - from: build/icons
+    to: icons
+    filter: ["**/*"]
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  icon: build/icon.icns
+  darkModeSupport: true
+  minimumSystemVersion: "13.0"
+  # ---- UNSIGNED BUILD: no Apple Developer certificate ----
+  # To sign: set identity to your "Developer ID Application: ..." string,
+  # hardenedRuntime: true, entitlements: build/entitlements.mac.plist,
+  # notarize: true, and export APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID.
+  identity: null
+  notarize: false
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  extendInfo:
+    LSUIElement: false
+    NSUserNotificationAlertStyle: alert
+    CFBundleURLTypes:
+      - CFBundleURLName: BoardTasks
+        CFBundleURLSchemes: [boardtasks]
+
+dmg:
+  window: { width: 660, height: 400 }
+  contents:
+    - { x: 180, y: 190, type: file }
+    - { x: 480, y: 190, type: link, path: /Applications }
+
+afterPack: scripts/adhoc-sign.cjs

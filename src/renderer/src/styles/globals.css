@@ -1,0 +1,18 @@
+html { background: var(--bt-bg-app); color: var(--bt-text-primary); font-family: var(--bt-font-sans); font-size: var(--bt-text-13); line-height: var(--bt-lh-13); letter-spacing: var(--bt-tracking-normal); }
+body { user-select: none; }
+input, textarea, [contenteditable] { user-select: text; }
+
+:where(button, a, input, textarea, select, [role="treeitem"], [role="option"], [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--bt-focus-ring);
+  border-radius: inherit;
+}
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+:root.bt-theme-switching, :root.bt-theme-switching * { transition: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --bt-dur-instant: 0.01ms; --bt-dur-fast: 0.01ms; --bt-dur-base: 0.01ms; --bt-dur-slow: 0.01ms; --bt-dur-sheet: 0.01ms; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
