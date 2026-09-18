@@ -2,7 +2,7 @@
 
 A premium Google Tasks desktop client for macOS. Offline-first sync, native reminders, a global quick-add with natural-language dates, a command palette, smart views (Today / Upcoming / Overdue), dark & light themes, menu-bar tray, and optional GitHub issue/PR linking.
 
-Built with Electron 44, React 19, TypeScript 5.9, and SQLite (better-sqlite3). No cloud service of its own — your data goes to Google Tasks and a local encrypted store, nowhere else.
+Built with Electron 44, React 19, TypeScript 5.9, and SQLite (better-sqlite3). No cloud service of its own, your data goes to Google Tasks and a local encrypted store, nowhere else.
 
 ## Engineering highlights
 
@@ -29,7 +29,7 @@ The short version:
 3. Configure the OAuth consent screen (External), add yourself as a test user, then set **Publishing status → In production**. This matters: while a project stays in _Testing_, Google expires refresh tokens after 7 days and you'd have to sign in weekly.
 4. Create credentials → OAuth client ID → **Desktop app**. Copy the Client ID and Client secret into BoardTasks.
 
-The client "secret" for a desktop app is not actually confidential (Google says so); the real protection is PKCE, which BoardTasks uses. Your credentials and refresh token are stored encrypted via the macOS Keychain (Electron `safeStorage`) — never in plaintext, never in this repo.
+The client "secret" for a desktop app is not actually confidential (Google says so); the real protection is PKCE, which BoardTasks uses. Your credentials and refresh token are stored encrypted via the macOS Keychain (Electron `safeStorage`), never in plaintext, never in this repo.
 
 Sign-in happens in your system browser (never inside the app window). The first time you'll see an "unverified app" screen because it's your own unpublished project: click **Advanced → Go to BoardTasks**.
 
@@ -55,7 +55,7 @@ npm run package:dir    # unpacked .app into dist/ (what the packaged E2E test la
 npm run package        # unsigned, ad-hoc-signed .dmg + .zip into dist/
 ```
 
-`tests/e2e/06-features.spec.ts` is the completeness suite — one test per promised feature, scored in
+`tests/e2e/06-features.spec.ts` is the completeness suite, one test per promised feature, scored in
 [`docs/feature-matrix.md`](docs/feature-matrix.md). `tests/e2e/07-packaged.spec.ts` launches the
 _packaged_ bundle and is opt-in:
 
@@ -63,8 +63,8 @@ _packaged_ bundle and is opt-in:
 npm run test:e2e:packaged
 ```
 
-What no test can reach — real OAuth, notification banners, the menu bar, VoiceOver, Gatekeeper on
-another Mac — is a checklist in [`docs/manual-qa.md`](docs/manual-qa.md).
+What no test can reach, real OAuth, notification banners, the menu bar, VoiceOver, Gatekeeper on
+another Mac, is a checklist in [`docs/manual-qa.md`](docs/manual-qa.md).
 
 Two pinned versions are load-bearing and must not be bumped casually: `vite` stays on 7.x (electron-vite 5 peers on it) and `typescript` on 5.x (typescript-eslint 8 peers on `<6.1`). The rest is annotated in `package.json`.
 
@@ -82,7 +82,7 @@ tests/          unit (vitest, node), dom (vitest, jsdom), e2e (Playwright + fake
 
 Full write-up with the threat model and the rules for future changes: [`docs/security.md`](docs/security.md).
 
-- `contextIsolation`, `sandbox`, no `nodeIntegration`; the renderer is served from a custom `app://` scheme with a strict CSP (`connect-src 'self'` — the UI literally cannot reach the network; all HTTP happens in main).
+- `contextIsolation`, `sandbox`, no `nodeIntegration`; the renderer is served from a custom `app://` scheme with a strict CSP (`connect-src 'self'`, the UI literally cannot reach the network; all HTTP happens in main).
 - Every IPC payload is validated with zod in main; the sender's origin and frame are checked.
 - OAuth uses Authorization Code + PKCE with a loopback redirect on `127.0.0.1` and a random port.
 - Tokens are encrypted with `safeStorage`. If the Keychain is unavailable the app keeps them in memory for the session rather than falling back to plaintext.
@@ -98,7 +98,7 @@ Google Tasks has no push API and no time-of-day on due dates, so sync is polled 
 
 Verified against the built app; the per-feature audit is in [`docs/feature-matrix.md`](docs/feature-matrix.md) and what needs a human is in [`docs/manual-qa.md`](docs/manual-qa.md).
 
-- **Never exercised against a real Google account.** OAuth, sync, conflicts and rate limits are proven against a faithful fake server (`tests/fixtures/fakeGoogle.ts`) and unit fakes that reproduce the API's quirks, but three real-API behaviours are undocumented — whether deleted-task tombstones flow with `updatedMin`, whether `updatedMin` is inclusive, and whether `If-Match`/412 is honoured. The engine is correct under every combination (idempotent merge + periodic full reconcile), and `npm run probe:api` settles them against a scratch account.
+- **Never exercised against a real Google account.** OAuth, sync, conflicts and rate limits are proven against a faithful fake server (`tests/fixtures/fakeGoogle.ts`) and unit fakes that reproduce the API's quirks, but three real-API behaviours are undocumented, whether deleted-task tombstones flow with `updatedMin`, whether `updatedMin` is inclusive, and whether `If-Match`/412 is honoured. The engine is correct under every combination (idempotent merge + periodic full reconcile), and `npm run probe:api` settles them against a scratch account.
 - **Translucent sidebar** takes effect on the next launch (Electron sets vibrancy when the window is created). The setting says so.
 - **Date order (M/D/Y vs D/M/Y)** affects how Quick Add parses `9/25`; dates are always _displayed_ as "Sep 25".
 - **Reminder times live on this Mac.** Google Tasks has no time-of-day, so `5pm` never reaches your phone.
