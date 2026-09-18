@@ -4,6 +4,14 @@ A premium Google Tasks desktop client for macOS. Offline-first sync, native remi
 
 Built with Electron 44, React 19, TypeScript 5.9, and SQLite (better-sqlite3). No cloud service of its own — your data goes to Google Tasks and a local encrypted store, nowhere else.
 
+## Engineering highlights
+
+- **Offline-first sync engine** over an API with no push, no search and no time-of-day: a transactional outbox, per-field three-way merge, exponential backoff with jitter that is honoured by a wake timer rather than the poll, and a pre-push pull so a remote edit is never overwritten blind.
+- **Stable local identity.** Every row has a UUID primary key from the moment it is created, so the UI, undo and the outbox never wait for Google to hand back an id.
+- **Civil dates, never `Date`.** Due dates are `YYYY-MM-DD` strings end to end; the unit suite also runs under `TZ=Pacific/Kiritimati` to prove it.
+- **Hardened Electron.** Sandboxed renderer on a custom `app://` scheme with a CSP that cannot reach the network, zod-validated IPC with sender checks, OAuth PKCE with a loopback redirect, tokens encrypted with the macOS Keychain, structurally scrubbed logs. Threat model in [`docs/security.md`](docs/security.md).
+- **Tested at every layer.** ~1300 vitest tests (node and jsdom), property-based convergence tests for the merge, and 41 Playwright specs that drive the built app against a faithful fake Google Tasks server with scripted outages, rate limits and clock skew, plus a smoke test that spawns the packaged `.app`.
+
 ## Requirements
 
 - macOS 13+ on Apple Silicon (the packaged build targets arm64)
@@ -18,7 +26,7 @@ The short version:
 
 1. Create a Google Cloud project.
 2. Enable the **Google Tasks API**.
-3. Configure the OAuth consent screen (External), add yourself as a test user, then set **Publishing status → In production**. This matters: while a project stays in *Testing*, Google expires refresh tokens after 7 days and you'd have to sign in weekly.
+3. Configure the OAuth consent screen (External), add yourself as a test user, then set **Publishing status → In production**. This matters: while a project stays in _Testing_, Google expires refresh tokens after 7 days and you'd have to sign in weekly.
 4. Create credentials → OAuth client ID → **Desktop app**. Copy the Client ID and Client secret into BoardTasks.
 
 The client "secret" for a desktop app is not actually confidential (Google says so); the real protection is PKCE, which BoardTasks uses. Your credentials and refresh token are stored encrypted via the macOS Keychain (Electron `safeStorage`) — never in plaintext, never in this repo.
@@ -49,7 +57,7 @@ npm run package        # unsigned, ad-hoc-signed .dmg + .zip into dist/
 
 `tests/e2e/06-features.spec.ts` is the completeness suite — one test per promised feature, scored in
 [`docs/feature-matrix.md`](docs/feature-matrix.md). `tests/e2e/07-packaged.spec.ts` launches the
-*packaged* bundle and is opt-in:
+_packaged_ bundle and is opt-in:
 
 ```bash
 npm run test:e2e:packaged
@@ -82,7 +90,7 @@ Full write-up with the threat model and the rules for future changes: [`docs/sec
 
 ### Sync model
 
-The local database is the source of truth for the UI. Every edit writes the row and an outbox entry in one transaction; the outbox is drained in order with backoff and jitter, and blocked entries (a child whose parent isn't on the server yet) wait without burning retries. Pulls use `updatedMin` with a safety skew and a watermark taken from the *server's* `updated` timestamps, plus periodic full reconciles. Conflicts are merged per field: your in-progress edit wins, and the server wins for fields you haven't touched. Nothing is ever silently dropped on the *push* side: a change that can't be pushed after repeated failures parks in "Unsynced changes" with Retry / Discard.
+The local database is the source of truth for the UI. Every edit writes the row and an outbox entry in one transaction; the outbox is drained in order with backoff and jitter, and blocked entries (a child whose parent isn't on the server yet) wait without burning retries. Pulls use `updatedMin` with a safety skew and a watermark taken from the _server's_ `updated` timestamps, plus periodic full reconciles. Conflicts are merged per field: your in-progress edit wins, and the server wins for fields you haven't touched. Nothing is ever silently dropped on the _push_ side: a change that can't be pushed after repeated failures parks in "Unsynced changes" with Retry / Discard.
 
 Google Tasks has no push API and no time-of-day on due dates, so sync is polled (60 s when focused, less often in the background) and reminder times are stored locally on this Mac.
 
@@ -92,7 +100,7 @@ Verified against the built app; the per-feature audit is in [`docs/feature-matri
 
 - **Never exercised against a real Google account.** OAuth, sync, conflicts and rate limits are proven against a faithful fake server (`tests/fixtures/fakeGoogle.ts`) and unit fakes that reproduce the API's quirks, but three real-API behaviours are undocumented — whether deleted-task tombstones flow with `updatedMin`, whether `updatedMin` is inclusive, and whether `If-Match`/412 is honoured. The engine is correct under every combination (idempotent merge + periodic full reconcile), and `npm run probe:api` settles them against a scratch account.
 - **Translucent sidebar** takes effect on the next launch (Electron sets vibrancy when the window is created). The setting says so.
-- **Date order (M/D/Y vs D/M/Y)** affects how Quick Add parses `9/25`; dates are always *displayed* as "Sep 25".
+- **Date order (M/D/Y vs D/M/Y)** affects how Quick Add parses `9/25`; dates are always _displayed_ as "Sep 25".
 - **Reminder times live on this Mac.** Google Tasks has no time-of-day, so `5pm` never reaches your phone.
 - **No account email** is shown after sign-in: the app requests only the Tasks scope.
 - **Unsigned build**: Gatekeeper needs a right-click → Open (or `xattr -dr com.apple.quarantine`) on a Mac other than the one that built it.
